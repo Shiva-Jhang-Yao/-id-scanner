@@ -14,6 +14,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <!-- 引入 OpenCV.js (本機端影像運算核心) -->
     <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()"></script>
+    <!-- 引入 jsPDF (匯出 PDF 功能) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -206,7 +208,10 @@
             <span id="resultSize" style="margin-left: 10px;"></span>
         </div>
         <img id="resultImage" alt="裁切結果">
-        <button id="downloadBtn" style="margin-top: 15px; background-color: #28a745;">⬇️ 下載圖片</button>
+        <div style="display: flex; gap: 10px; margin-top: 15px;">
+            <button id="downloadJpgBtn" style="background-color: #28a745; flex: 1;">⬇️ 下載圖片 (JPG)</button>
+            <button id="downloadPdfBtn" style="background-color: #dc3545; flex: 1;">📄 下載 PDF (A4)</button>
+        </div>
         <button id="reeditBtn" style="margin-top: 10px; background-color: #6c757d;">🔙 重新調整</button>
     </div>
     
@@ -253,7 +258,8 @@
         const processBtn = document.getElementById('processBtn');
         const resetBtn = document.getElementById('resetBtn');
         const loading = document.getElementById('loading');
-        const downloadBtn = document.getElementById('downloadBtn');
+        const downloadJpgBtn = document.getElementById('downloadJpgBtn');
+        const downloadPdfBtn = document.getElementById('downloadPdfBtn');
         const reeditBtn = document.getElementById('reeditBtn');
         const btnRotate = document.getElementById('btnRotate');
         const floatingControls = document.getElementById('floatingControls');
@@ -392,11 +398,40 @@
             }
         };
 
-        // 處理照片選擇的共用邏輯
+        // 處理照片選擇的共用邏輯 (加入記憶體防護預縮放)
         const handleFileSelect = async (e) => {
             if (!e.target.files[0]) return;
-            currentFile = e.target.files[0];
-            imageObj.src = URL.createObjectURL(currentFile);
+            let file = e.target.files[0];
+            
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                const MAX_DIM = 2000; // 限制最大邊長為 2000 像素
+                let width = tempImg.width;
+                let height = tempImg.height;
+                
+                if (width > MAX_DIM || height > MAX_DIM) {
+                    console.log(`📸 圖片過大 (${tempImg.width}x${tempImg.height})，執行防閃退預縮放...`);
+                    const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+                    width = Math.round(width * ratio);
+                    height = Math.round(height * ratio);
+                    
+                    const offCanvas = document.createElement('canvas');
+                    offCanvas.width = width;
+                    offCanvas.height = height;
+                    const offCtx = offCanvas.getContext('2d');
+                    offCtx.drawImage(tempImg, 0, 0, width, height);
+                    
+                    offCanvas.toBlob((blob) => {
+                        currentFile = new File([blob], file.name, { type: 'image/jpeg' });
+                        imageObj.src = URL.createObjectURL(currentFile);
+                    }, 'image/jpeg', 0.95);
+                } else {
+                    currentFile = file;
+                    imageObj.src = URL.createObjectURL(currentFile);
+                }
+            };
+            tempImg.src = URL.createObjectURL(file);
+            
             // 清空 input，確保即使重複選取同一張照片也能觸發更新
             e.target.value = '';
         };
@@ -991,7 +1026,7 @@
         }
 
         // 處理下載圖片邏輯
-        downloadBtn.addEventListener('click', () => {
+        downloadJpgBtn.addEventListener('click', () => {
             const dataUrl = document.getElementById('resultImage').src;
             if (!dataUrl || !dataUrl.startsWith('data:image')) return;
             
@@ -1009,6 +1044,33 @@
                     document.body.removeChild(link);
                     URL.revokeObjectURL(blobUrl); // 釋放記憶體
                 });
+        });
+
+        // 處理下載 PDF 邏輯
+        downloadPdfBtn.addEventListener('click', () => {
+            const { jsPDF } = window.jspdf;
+            const imgData = document.getElementById('resultImage').src;
+            if (!imgData || !imgData.startsWith('data:image')) return;
+
+            const img = new Image();
+            img.onload = () => {
+                const pdf = new jsPDF({
+                    orientation: 'p', // portrait (直向)
+                    unit: 'mm',
+                    format: 'a4'
+                });
+
+                const A4_WIDTH = 210;
+                const A4_HEIGHT = 297;
+                const MARGIN = 10;
+
+                const imgRatio = img.width / img.height;
+                let imgWidth = A4_WIDTH - MARGIN * 2;
+                let imgHeight = imgWidth / imgRatio;
+                pdf.addImage(img, 'JPEG', MARGIN, MARGIN, imgWidth, imgHeight);
+                pdf.save('id_card_scan.pdf');
+            };
+            img.src = imgData;
         });
 
         // 處理重新調整邏輯
