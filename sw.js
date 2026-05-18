@@ -1,4 +1,4 @@
-const CACHE_NAME = 'id-scanner-v1';
+const CACHE_NAME = 'id-scanner-v2';
 const urlsToCache = [
     './',
     './manifest.json',
