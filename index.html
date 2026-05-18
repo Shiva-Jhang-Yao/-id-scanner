@@ -152,15 +152,15 @@
         <div class="canvas-container">
             <canvas id="canvas"></canvas>
         </div>
-        <div class="hint-text">👆 點擊紅點選取(變黃色)後，下方按鈕像素級微調</div>
+        <div class="hint-text">👆 點擊角落(紅點)或邊緣(藍方塊)選取後，下方按鈕微調</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: auto auto auto; align-items: center; justify-items: center; gap: 8px; margin-bottom: 15px;">
             <div style="grid-column: 2 / 3; grid-row: 1 / 2;"><button id="btnUp" class="btn-nudge">⬆️</button></div>
             <div style="grid-column: 1 / 2; grid-row: 2 / 3;"><button id="btnLeft" class="btn-nudge">⬅️</button></div>
             <div style="grid-column: 2 / 3; grid-row: 2 / 3;">
                 <select id="nudgeStep" style="padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; height: 100%;">
                     <option value="1">1px</option>
-                    <option value="5">5px</option>
-                    <option value="10" selected>10px</option>
+                    <option value="5" selected>5px</option>
+                    <option value="10">10px</option>
                     <option value="50">50px</option>
                 </select>
             </div>
@@ -168,9 +168,13 @@
             <div style="grid-column: 2 / 3; grid-row: 3 / 4;"><button id="btnDown" class="btn-nudge">⬇️</button></div>
         </div>
         <div style="text-align: center; margin-bottom: 15px;">
-            <label style="cursor: pointer; font-size: 0.9rem; color: #007bff; font-weight: bold;">
+            <label style="cursor: pointer; font-size: 0.9rem; color: #007bff; font-weight: bold; display: block; margin-bottom: 8px;">
                 <input type="checkbox" id="autoSnap" checked> 🧲 啟用邊緣自動吸附 (放開手指時生效)
             </label>
+            <div id="snapStrengthContainer" style="transition: opacity 0.3s;">
+                <label for="snapStrength" style="font-size: 0.9rem; color: #666;">吸附力道: <span id="snapStrengthValue">弱</span></label>
+                <input type="range" id="snapStrength" min="1" max="5" value="2" style="width: 50%; max-width: 200px; vertical-align: middle;">
+            </div>
         </div>
         
         <h2>📐 3. 裁切與輸出設定</h2>
@@ -266,12 +270,36 @@
         const openFiltersBtn = document.getElementById('openFiltersBtn');
         const closeFiltersBtn = document.getElementById('closeFiltersBtn');
         
+        // 吸附力道 UI 控制
+        const autoSnapCheckbox = document.getElementById('autoSnap');
+        const snapStrengthContainer = document.getElementById('snapStrengthContainer');
+        const snapStrengthSlider = document.getElementById('snapStrength');
+        const snapStrengthValue = document.getElementById('snapStrengthValue');
+
+        const strengthTextMap = { 1: '最弱', 2: '弱', 3: '中', 4: '強', 5: '最強' };
+
+        function updateSnapUI() {
+            const isChecked = autoSnapCheckbox.checked;
+            snapStrengthContainer.style.opacity = isChecked ? '1' : '0';
+            snapStrengthContainer.style.pointerEvents = isChecked ? 'auto' : 'none';
+            snapStrengthValue.textContent = strengthTextMap[snapStrengthSlider.value];
+        }
+
+        autoSnapCheckbox.addEventListener('change', updateSnapUI);
+        snapStrengthSlider.addEventListener('input', () => {
+            snapStrengthValue.textContent = strengthTextMap[snapStrengthSlider.value];
+        });
+        updateSnapUI(); // 初始化
+
         let currentFile = null;
         let imageObj = new Image();
         let points = []; // [{x, y}, {x, y}, {x, y}, {x, y}]
         let draggingIdx = -1;
         let selectedIdx = 0; // 紀錄目前被選中的點
         let isDragging = false; // 紀錄是否真的有發生拖曳移動
+        let draggingEdgeIdx = -1; // 紀錄目前正在拖拉的「邊」
+        let selectedEdgeIdx = -1; // 紀錄目前被選中的「邊」
+        let lastEdgeDragPoint = null; // 紀錄邊緣拖曳的上一幀座標
 
         // 更新濾鏡提示顯示狀態
         function updateFilterHint() {
@@ -388,6 +416,7 @@
             const m = Math.min(w, h) * 0.1;
             points = [ {x: m, y: m}, {x: w-m, y: m}, {x: w-m, y: h-m}, {x: m, y: h-m} ];
             selectedIdx = 0; // 預設選取第一個點
+            selectedEdgeIdx = -1;
             drawCanvas();
             updateFilterHint(); // 載入新圖時重置提示
             
@@ -512,6 +541,7 @@
                     
                     points = [{x: x1, y: y1}, {x: x2, y: y1}, {x: x2, y: y2}, {x: x1, y: y2}];
                     selectedIdx = 0; drawCanvas();
+                    selectedEdgeIdx = -1;
                     return true;
                 }
                 return false;
@@ -579,6 +609,7 @@
 
                 if (found) {
                     selectedIdx = 0; drawCanvas();
+                    selectedEdgeIdx = -1;
                 }
             } catch (err) { console.error("AI 偵測失敗", err); }
         }
@@ -586,6 +617,9 @@
         // 繪製 Canvas
         function drawCanvas() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const activeIdx = draggingIdx !== -1 ? draggingIdx : selectedIdx;
+            const activeEdgeIdx = draggingEdgeIdx !== -1 ? draggingEdgeIdx : selectedEdgeIdx;
             
             // 取得濾鏡數值並轉換為 CSS Filter 語法以達到即時預覽效果
             const b = document.getElementById('slider_b').value;
@@ -629,13 +663,42 @@
             for (let i = 1; i < 4; i++) ctx.lineTo(points[i].x, points[i].y);
             ctx.closePath();
             ctx.stroke();
+            
+            // 畫選取邊緣的高亮線條
+            if (activeEdgeIdx !== -1) {
+                ctx.strokeStyle = 'rgba(255, 255, 0, 0.9)';
+                ctx.lineWidth = (canvas.width * 0.008) / transform.scale;
+                ctx.beginPath();
+                ctx.moveTo(points[activeEdgeIdx].x, points[activeEdgeIdx].y);
+                ctx.lineTo(points[(activeEdgeIdx + 1) % 4].x, points[(activeEdgeIdx + 1) % 4].y);
+                ctx.stroke();
+            }
+            
+            // 畫邊緣中點 (藍色控制方塊)
+            const midRadius = (canvas.width * 0.015) / transform.scale;
+            for (let i = 0; i < 4; i++) {
+                const midX = (points[i].x + points[(i + 1) % 4].x) / 2;
+                const midY = (points[i].y + points[(i + 1) % 4].y) / 2;
+                ctx.beginPath();
+                ctx.rect(midX - midRadius, midY - midRadius, midRadius * 2, midRadius * 2);
+                if (i === activeEdgeIdx) {
+                    ctx.fillStyle = 'rgba(255, 255, 0, 0.9)';
+                    ctx.fill();
+                    ctx.lineWidth = (canvas.width * 0.005) / transform.scale;
+                    ctx.strokeStyle = '#FF0000';
+                    ctx.stroke();
+                } else {
+                    ctx.fillStyle = 'rgba(0, 123, 255, 0.8)'; // 藍色代表邊緣
+                    ctx.fill();
+                }
+            }
 
             // 畫點
             const radius = (canvas.width * 0.02) / transform.scale; 
             points.forEach((p, i) => {
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, (i === draggingIdx || i === selectedIdx) ? radius * 1.5 : radius, 0, 2 * Math.PI);
-                if (i === selectedIdx) {
+                ctx.arc(p.x, p.y, (i === activeIdx) ? radius * 1.5 : radius, 0, 2 * Math.PI);
+                if (i === activeIdx && activeIdx === selectedIdx && draggingIdx === -1) {
                     ctx.fillStyle = 'rgba(255, 255, 0, 0.9)'; // 選取狀態：黃色
                     ctx.fill();
                     ctx.lineWidth = (canvas.width * 0.005) / transform.scale;
@@ -648,9 +711,15 @@
             });
 
             // --- 放大鏡 (Magnifier) 功能 ---
-            const activeIdx = draggingIdx !== -1 ? draggingIdx : selectedIdx;
+            let magCenter = null;
             if (activeIdx !== -1) {
-                const pt = points[activeIdx];
+                magCenter = points[activeIdx];
+            } else if (activeEdgeIdx !== -1) {
+                magCenter = { x: (points[activeEdgeIdx].x + points[(activeEdgeIdx + 1) % 4].x) / 2, y: (points[activeEdgeIdx].y + points[(activeEdgeIdx + 1) % 4].y) / 2 };
+            }
+
+            if (magCenter) {
+                const pt = magCenter;
                 const zoomFactor = 3; // 放大倍率
                 const magDispSize = (canvas.width * 0.3) / transform.scale; // 放大鏡實體大小保持不變
                 const margin = (canvas.width * 0.02) / transform.scale;     
@@ -735,8 +804,19 @@
             if (!cvReady || !document.getElementById('autoSnap').checked) return;
             const pt = points[idx];
             
-            // 動態計算裁切半徑 (取圖片長寬最大值的 3% 作為搜尋範圍)
-            const cropR = Math.floor(Math.max(imageObj.width, imageObj.height) * 0.03);
+            // 根據拉桿決定吸附力道
+            const strengthValue = parseInt(document.getElementById('snapStrength').value, 10);
+            const strengthMap = {
+                1: { percent: 0.02, quality: 0.05 }, // 最弱
+                2: { percent: 0.04, quality: 0.03 }, // 弱
+                3: { percent: 0.06, quality: 0.01 }, // 中 (預設)
+                4: { percent: 0.08, quality: 0.01 }, // 強
+                5: { percent: 0.10, quality: 0.01 }  // 最強
+            };
+            const currentStrength = strengthMap[strengthValue];
+
+            // 動態計算裁切半徑
+            const cropR = Math.floor(Math.max(imageObj.width, imageObj.height) * currentStrength.percent);
             
             const offCanvas = document.getElementById('offscreenCanvas');
             offCanvas.width = cropR * 2;
@@ -755,7 +835,8 @@
                 
                 let corners = new cv.Mat();
                 let mask = new cv.Mat();
-                cv.goodFeaturesToTrack(blur, corners, 5, 0.02, 5, mask, 15);
+                // 增加候選點數量 (10) 並根據力道調整品質閾值
+                cv.goodFeaturesToTrack(blur, corners, 10, currentStrength.quality, 5, mask, 15);
                 
                 if (corners.rows > 0) {
                     let cx = cropR, cy = cropR;
@@ -781,6 +862,7 @@
             if (activePointers.size === 2) {
                 // 開始兩指縮放
                 draggingIdx = -1;
+                draggingEdgeIdx = -1;
                 isDragging = false;
                 lastPanPoint = null;
                 const pts = Array.from(activePointers.values());
@@ -799,11 +881,25 @@
                 draggingIdx = points.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
                 if (draggingIdx !== -1) {
                     selectedIdx = draggingIdx;
+                    selectedEdgeIdx = -1;
                     isDragging = false;
                     lastPanPoint = null;
                 } else {
-                    selectedIdx = -1; // 點擊空白處
-                    lastPanPoint = { x: e.clientX, y: e.clientY }; // 準備單指平移
+                    // 檢查是否點擊邊緣中點
+                    const midpoints = points.map((p, i) => ({ x: (p.x + points[(i + 1) % 4].x) / 2, y: (p.y + points[(i + 1) % 4].y) / 2 }));
+                    draggingEdgeIdx = midpoints.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
+                    
+                    if (draggingEdgeIdx !== -1) {
+                        selectedEdgeIdx = draggingEdgeIdx;
+                        selectedIdx = -1;
+                        isDragging = false;
+                        lastPanPoint = null;
+                        lastEdgeDragPoint = { x: pos.x, y: pos.y };
+                    } else {
+                        selectedIdx = -1;
+                        selectedEdgeIdx = -1;
+                        lastPanPoint = { x: e.clientX, y: e.clientY }; // 準備單指平移
+                    }
                 }
                 drawCanvas();
             }
@@ -838,6 +934,17 @@
                     points[draggingIdx] = getPointerPos(e);
                     isDragging = true;
                     drawCanvas();
+                } else if (draggingEdgeIdx !== -1) {
+                    const pos = getPointerPos(e);
+                    const dx = pos.x - lastEdgeDragPoint.x;
+                    const dy = pos.y - lastEdgeDragPoint.y;
+                    points[draggingEdgeIdx].x += dx;
+                    points[draggingEdgeIdx].y += dy;
+                    points[(draggingEdgeIdx + 1) % 4].x += dx;
+                    points[(draggingEdgeIdx + 1) % 4].y += dy;
+                    lastEdgeDragPoint = { x: pos.x, y: pos.y };
+                    isDragging = true;
+                    drawCanvas();
                 } else if (lastPanPoint) {
                     // 單指平移畫布
                     const dx = e.clientX - lastPanPoint.x;
@@ -859,18 +966,28 @@
             }
 
             if (activePointers.size === 0) {
-                if (draggingIdx !== -1 && isDragging) {
-                    snapPoint(draggingIdx);
+                if (isDragging) { // 檢查是否有發生拖曳
+                    if (draggingIdx !== -1) {
+                        // 吸附被拖曳的單一角點
+                        snapPoint(draggingIdx);
+                    } else if (draggingEdgeIdx !== -1) {
+                        // 當邊緣被拖曳時，自動吸附其相連的兩個角點
+                        snapPoint(draggingEdgeIdx);
+                        snapPoint((draggingEdgeIdx + 1) % 4);
+                    }
                 }
                 draggingIdx = -1;
+                draggingEdgeIdx = -1;
+                lastEdgeDragPoint = null;
                 isDragging = false;
                 lastPanPoint = null;
-                drawCanvas();
+                drawCanvas(); // 完成所有操作後最終重繪
             } else if (activePointers.size === 1) {
                 // 從兩指變回單指時，將剩餘的手指設為平移起點，防止畫面跳動
                 const remaining = Array.from(activePointers.values())[0];
                 lastPanPoint = { x: remaining.x, y: remaining.y };
                 draggingIdx = -1;
+                draggingEdgeIdx = -1; // 修正：當從兩指縮放變回單指平移時，應一併重置邊緣拖曳狀態
             }
         };
 
@@ -880,11 +997,18 @@
 
         // 方向鍵微調邏輯
         const nudgePoint = (dx, dy) => {
-            if (selectedIdx === -1) return;
             const step = parseInt(document.getElementById('nudgeStep').value, 10);
-            points[selectedIdx].x += dx * step;
-            points[selectedIdx].y += dy * step;
-            drawCanvas();
+            if (selectedIdx !== -1) {
+                points[selectedIdx].x += dx * step;
+                points[selectedIdx].y += dy * step;
+                drawCanvas();
+            } else if (selectedEdgeIdx !== -1) {
+                points[selectedEdgeIdx].x += dx * step;
+                points[selectedEdgeIdx].y += dy * step;
+                points[(selectedEdgeIdx + 1) % 4].x += dx * step;
+                points[(selectedEdgeIdx + 1) % 4].y += dy * step;
+                drawCanvas();
+            }
         };
         document.getElementById('btnUp').addEventListener('click', () => nudgePoint(0, -1));
         document.getElementById('btnDown').addEventListener('click', () => nudgePoint(0, 1));
