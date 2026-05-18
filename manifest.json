@@ -1,0 +1,15 @@
+{
+  "name": "手機證件掃描器",
+  "short_name": "證件掃描",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#007bff",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

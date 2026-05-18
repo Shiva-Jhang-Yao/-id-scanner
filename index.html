@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <!-- 針對手機瀏覽器最佳化 viewport -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>手機證件掃描器</title>
+    <!-- PWA 標籤 -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#007bff">
+    <link rel="apple-touch-icon" href="./icon.svg">
+    
+    <!-- 引入 TensorFlow.js (預備掛載 YOLO tfjs 模型) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <!-- 引入 OpenCV.js (本機端影像運算核心) -->
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f6f8;
+            margin: 0;
+            padding: 15px;
+            color: #333;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        h2 { margin-top: 0; font-size: 1.2rem; }
+        
+        /* Canvas 響應式設定 */
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            overflow: hidden; /* 確保放大的圖片不會超出範圍 */
+            text-align: center;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #222; /* 縮放時露出的底色 */
+        }
+        canvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            touch-action: none; /* 防止在 canvas 上滑動時觸發網頁捲動 */
+            transform-origin: 0 0; /* 縮放原點設為左上角 */
+            will-change: transform;
+        }
+        
+        /* 濾鏡拉桿設計 */
+        .slider-group { margin-bottom: 10px; }
+        .slider-group label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 5px; }
+        input[type="range"] { width: 100%; }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:disabled { background-color: #ccc; }
+        
+        /* 結果顯示區 */
+        #resultImage { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd; }
+        .data-box { background: #e9ecef; padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 1rem; }
+        
+        #loading { display: none; text-align: center; color: #007bff; font-weight: bold; margin-bottom: 10px; }
+        /* 拍照與上傳按鈕 */
+        .upload-wrapper { display: flex; gap: 10px; }
+        .btn-upload {
+            flex: 1;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: white;
+            background-color: #28a745;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .btn-gallery { background-color: #17a2b8; }
+        
+        /* 方向鍵微調 */
+        .nudge-group { display: flex; gap: 8px; justify-content: center; margin-bottom: 15px; }
+        .btn-nudge { background-color: #6c757d; padding: 10px; font-size: 1.2rem; flex: 1; border-radius: 8px; border: none; color: white; cursor: pointer; }
+        .hint-text { text-align: center; font-size: 0.85rem; color: #666; margin-bottom: 10px; }
+
+        /* 懸浮控制面板 */
+        #floatingControls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 15px;
+            padding-bottom: calc(15px + env(safe-area-inset-bottom)); /* iPhone 安全區域 */
+            border-top: 1px solid #e0e0e0;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+            z-index: 1000;
+            transform: translateY(100%);
+            transition: transform 0.3s ease-out;
+        }
+        #floatingControls.visible {
+            transform: translateY(0);
+        }
+        body.controls-visible {
+            padding-bottom: 380px; /* 預留空間避免內容被覆蓋 */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="cvLoading" style="text-align: center; margin: 20px; font-weight: bold; color: #007bff;">
+        ⚙️ 正在載入本機端 AI 與影像引擎，請稍候...
+    </div>
+
+    <div class="card" id="uploadCard" style="display: none;">
+        <h2>📷 1. 拍照或選擇照片</h2>
+        <div class="upload-wrapper">
+            <button class="btn-upload" onclick="document.getElementById('cameraInput').click()">📸 直接拍照</button>
+            <button class="btn-upload btn-gallery" onclick="document.getElementById('galleryInput').click()">🖼️ 相簿選取</button>
+        </div>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
+        <input type="file" id="galleryInput" accept="image/*" style="display: none;">
+    </div>
+
+    <div class="card" id="editorCard" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+            <h2 style="margin-bottom: 0; line-height: 34px;">🎯 2. 微調四個角落</h2>
+            <div style="text-align: right;">
+                <div>
+                    <button id="openFiltersBtn" style="width: auto; padding: 6px 12px; font-size: 0.9rem; background-color: #17a2b8; margin: 0 5px;">🎛️ 濾鏡</button>
+                    <button id="btnRotate" style="width: auto; padding: 6px 12px; font-size: 0.9rem; background-color: #6c757d; margin: 0;">🔃 旋轉</button>
+                </div>
+                <div id="filterActiveHint" style="display: none; font-size: 0.8rem; color: #ff9800; font-weight: bold; margin-top: 5px; margin-right: 5px;">✨ 濾鏡已套用</div>
+            </div>
+        </div>
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+        <div class="hint-text">👆 點擊紅點選取(變黃色)後，下方按鈕像素級微調</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: auto auto auto; align-items: center; justify-items: center; gap: 8px; margin-bottom: 15px;">
+            <div style="grid-column: 2 / 3; grid-row: 1 / 2;"><button id="btnUp" class="btn-nudge">⬆️</button></div>
+            <div style="grid-column: 1 / 2; grid-row: 2 / 3;"><button id="btnLeft" class="btn-nudge">⬅️</button></div>
+            <div style="grid-column: 2 / 3; grid-row: 2 / 3;">
+                <select id="nudgeStep" style="padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; height: 100%;">
+                    <option value="1">1px</option>
+                    <option value="5">5px</option>
+                    <option value="10" selected>10px</option>
+                    <option value="50">50px</option>
+                </select>
+            </div>
+            <div style="grid-column: 3 / 4; grid-row: 2 / 3;"><button id="btnRight" class="btn-nudge">➡️</button></div>
+            <div style="grid-column: 2 / 3; grid-row: 3 / 4;"><button id="btnDown" class="btn-nudge">⬇️</button></div>
+        </div>
+        <div style="text-align: center; margin-bottom: 15px;">
+            <label style="cursor: pointer; font-size: 0.9rem; color: #007bff; font-weight: bold;">
+                <input type="checkbox" id="autoSnap" checked> 🧲 啟用邊緣自動吸附 (放開手指時生效)
+            </label>
+        </div>
+        
+        <h2>📐 3. 裁切與輸出設定</h2>
+        <div style="margin-bottom: 10px;">
+            <label style="font-size: 0.9rem; color: #666;">裁切比例：</label>
+            <select id="aspectRatio" style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem;">
+                <option value="1.586">💳 標準證件 (約 1.586:1)</option>
+                <option value="1.414">📄 A4 文件 (約 1.414:1)</option>
+                <option value="1.333">📸 4:3 照片</option>
+                <option value="1.778">📺 16:9 螢幕</option>
+                <option value="0">✂️ 自由比例 (依選取框大小)</option>
+            </select>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label style="font-size: 0.9rem; color: #666;">輸出尺寸 (若超過將自動縮小)：</label>
+            <select id="outputResolution" style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem;">
+                <option value="0">🌟 原始大小 (最高畫質)</option>
+                <option value="1920">📱 高畫質 (長邊最高 1920px)</option>
+                <option value="1080">💻 標準畫質 (長邊最高 1080px)</option>
+                <option value="800">🌐 網路傳輸 (長邊最高 800px)</option>
+            </select>
+        </div>
+
+        <div id="loading">⏳ 處理中，請稍候...</div>
+        <div style="display: flex; gap: 10px;">
+            <button id="resetBtn" style="background-color: #6c757d; flex: 1;">🔄 重置</button>
+            <button id="processBtn" style="flex: 2;">✂️ 裁切圖片</button>
+        </div>
+    </div>
+
+    <div class="card" id="resultCard" style="display: none;">
+        <h2>✨ 處理結果</h2>
+        <div style="text-align: center; font-size: 0.9rem; color: #666; margin-bottom: 10px;">
+            <span id="resultResolution"></span>
+            <span id="resultSize" style="margin-left: 10px;"></span>
+        </div>
+        <img id="resultImage" alt="裁切結果">
+        <button id="downloadBtn" style="margin-top: 15px; background-color: #28a745;">⬇️ 下載圖片</button>
+        <button id="reeditBtn" style="margin-top: 10px; background-color: #6c757d;">🔙 重新調整</button>
+    </div>
+    
+    <!-- 懸浮控制面板 -->
+    <div id="floatingControls">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h2 style="margin: 0;">🎨 調整影像</h2>
+            <button id="closeFiltersBtn" style="width: auto; padding: 6px 12px; margin: 0; background-color: #6c757d; font-size: 0.9rem;">🔽 收起</button>
+        </div>
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <label style="flex: 1; cursor: pointer; text-align: center; background: #e9ecef; padding: 10px; border-radius: 8px; font-weight: bold;">
+                <input type="checkbox" id="chkGrayscale"> 🌑 黑白化
+            </label>
+            <label style="flex: 1; cursor: pointer; text-align: center; background: #e9ecef; padding: 10px; border-radius: 8px; font-weight: bold;">
+                <input type="checkbox" id="chkBinarize"> 🔲 二值化
+            </label>
+        </div>
+        <div class="slider-group">
+            <label><span>亮度 (Brightness)</span> <span id="val_b">100</span></label>
+            <input type="range" id="slider_b" min="0" max="200" value="100">
+        </div>
+        <div class="slider-group">
+            <label><span>對比度 (Contrast)</span> <span id="val_c">1.0</span></label>
+            <input type="range" id="slider_c" min="0" max="300" value="100">
+        </div>
+        <div class="slider-group">
+            <label><span>飽和度 (Saturation)</span> <span id="val_s">1.0</span></label>
+            <input type="range" id="slider_s" min="0" max="300" value="100">
+        </div>
+        <div class="slider-group">
+            <label><span>銳化 (Sharpness) <small style="font-weight:normal; color:#666;">(裁切後生效)</small></span> <span id="val_sharp">1.0</span></label>
+            <input type="range" id="slider_sharp" min="0" max="200" value="100">
+        </div>
+    </div>
+
+    <!-- 供 OpenCV.js 進行背景運算的隱藏畫布 -->
+    <canvas id="offscreenCanvas" style="display: none;"></canvas>
+
+    <script>
+        const cameraInput = document.getElementById('cameraInput');
+        const galleryInput = document.getElementById('galleryInput');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const processBtn = document.getElementById('processBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const loading = document.getElementById('loading');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const reeditBtn = document.getElementById('reeditBtn');
+        const btnRotate = document.getElementById('btnRotate');
+        const floatingControls = document.getElementById('floatingControls');
+        const openFiltersBtn = document.getElementById('openFiltersBtn');
+        const closeFiltersBtn = document.getElementById('closeFiltersBtn');
+        
+        let currentFile = null;
+        let imageObj = new Image();
+        let points = []; // [{x, y}, {x, y}, {x, y}, {x, y}]
+        let draggingIdx = -1;
+        let selectedIdx = 0; // 紀錄目前被選中的點
+        let isDragging = false; // 紀錄是否真的有發生拖曳移動
+
+        // 更新濾鏡提示顯示狀態
+        function updateFilterHint() {
+            const b = document.getElementById('slider_b').value;
+            const c = document.getElementById('slider_c').value;
+            const s = document.getElementById('slider_s').value;
+            const sharp = document.getElementById('slider_sharp').value;
+            const isGrayscale = document.getElementById('chkGrayscale').checked;
+            const isBinarize = document.getElementById('chkBinarize').checked;
+            const isModified = (b !== '100' || c !== '100' || s !== '100' || sharp !== '100' || isGrayscale || isBinarize);
+            const isPanelHidden = !floatingControls.classList.contains('visible');
+            document.getElementById('filterActiveHint').style.display = (isModified && isPanelHidden) ? 'block' : 'none';
+        }
+
+        // 新增手勢與變換狀態
+        let transform = { scale: 1, x: 0, y: 0 };
+        let activePointers = new Map();
+        let initialPinchDistance = null;
+        let initialTransform = null;
+        let initialPinchCenter = null;
+        let lastPanPoint = null;
+
+        function updateCanvasTransform() {
+            canvas.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
+        }
+
+        function resetTransform() {
+            transform = { scale: 1, x: 0, y: 0 };
+            updateCanvasTransform();
+        }
+
+        // AI 與 OpenCV 引擎初始化
+        let cvReady = false;
+        let yoloModel = null;
+        
+        async function loadYoloModel() {
+            try {
+                // 嘗試載入 YOLO TFJS 模型
+                yoloModel = await tf.loadGraphModel('./model_web/model.json');
+                console.log("✅ YOLO TF.js 模型載入成功！");
+            } catch (e) {
+                console.log("⚠️ 找不到 YOLO 模型，將自動使用 OpenCV 傳統邊緣偵測作為備案。");
+            }
+        }
+        
+        function onOpenCvReady() {
+            cvReady = true;
+            loadYoloModel().then(() => {
+                document.getElementById('cvLoading').style.display = 'none';
+                document.getElementById('uploadCard').style.display = 'block';
+            });
+        }
+
+        // 更新滑桿數字顯示
+        ['b', 'c', 's', 'sharp'].forEach(id => {
+            const slider = document.getElementById(`slider_${id}`);
+            const valSpan = document.getElementById(`val_${id}`);
+            slider.addEventListener('input', (e) => {
+                let val = e.target.value;
+                if (id !== 'b') val = (val / 100).toFixed(1);
+                valSpan.textContent = val;
+                drawCanvas(); // 拉動滑桿時即時重繪預覽
+                updateFilterHint();
+            });
+        });
+        
+        // 核取方塊改變時也即時重繪預覽
+        document.getElementById('chkGrayscale').addEventListener('change', () => {
+            drawCanvas();
+            updateFilterHint();
+        });
+        document.getElementById('chkBinarize').addEventListener('change', () => {
+            drawCanvas();
+            updateFilterHint();
+        });
+
+        // 處理一鍵重置濾鏡邏輯
+        resetBtn.addEventListener('click', () => {
+            const defaults = { 'b': { val: 100, text: '100' }, 'c': { val: 100, text: '1.0' }, 's': { val: 100, text: '1.0' }, 'sharp': { val: 100, text: '1.0' } };
+            for (const id in defaults) {
+                document.getElementById(`slider_${id}`).value = defaults[id].val;
+                document.getElementById(`val_${id}`).textContent = defaults[id].text;
+            }
+            document.getElementById('chkGrayscale').checked = false;
+            document.getElementById('chkBinarize').checked = false;
+            resetTransform(); // 同時重置畫布的縮放與平移
+            drawCanvas(); // 重繪畫布以取消濾鏡效果
+            updateFilterHint();
+        });
+
+        // 處理濾鏡面板的展開與收起
+        openFiltersBtn.addEventListener('click', () => {
+            floatingControls.classList.add('visible');
+            document.body.classList.add('controls-visible');
+            updateFilterHint();
+        });
+        closeFiltersBtn.addEventListener('click', () => {
+            floatingControls.classList.remove('visible');
+            document.body.classList.remove('controls-visible');
+            updateFilterHint();
+        });
+
+        // 將圖片載入完成的邏輯獨立出來，以便旋轉後能重複使用
+        imageObj.onload = async () => {
+            canvas.width = imageObj.width;
+            canvas.height = imageObj.height;
+            document.getElementById('editorCard').style.display = 'block';
+            document.getElementById('resultCard').style.display = 'none';
+            
+            resetTransform(); // 載入新圖片時重置縮放狀態
+            
+            // 給預設的 4 個點 (內縮 10%)
+            const w = imageObj.width, h = imageObj.height;
+            const m = Math.min(w, h) * 0.1;
+            points = [ {x: m, y: m}, {x: w-m, y: m}, {x: w-m, y: h-m}, {x: m, y: h-m} ];
+            selectedIdx = 0; // 預設選取第一個點
+            drawCanvas();
+            updateFilterHint(); // 載入新圖時重置提示
+            
+            // 優先嘗試純前端 YOLO 推論，若失敗或未載入則退回 OpenCV 邊緣偵測
+            let yoloSuccess = await runYoloInference();
+            if (!yoloSuccess) {
+                autoDetectCornersLocal();
+            }
+        };
+
+        // 處理照片選擇的共用邏輯
+        const handleFileSelect = async (e) => {
+            if (!e.target.files[0]) return;
+            currentFile = e.target.files[0];
+            imageObj.src = URL.createObjectURL(currentFile);
+            // 清空 input，確保即使重複選取同一張照片也能觸發更新
+            e.target.value = '';
+        };
+
+        cameraInput.addEventListener('change', handleFileSelect);
+        galleryInput.addEventListener('change', handleFileSelect);
+
+        // 處理圖片旋轉 90 度
+        btnRotate.addEventListener('click', () => {
+            if (!currentFile) return;
+            
+            // 建立離線畫布來進行影像旋轉
+            const offCanvas = document.createElement('canvas');
+            const offCtx = offCanvas.getContext('2d');
+            offCanvas.width = imageObj.height;
+            offCanvas.height = imageObj.width;
+            
+            // 旋轉 90 度並重繪
+            offCtx.translate(offCanvas.width / 2, offCanvas.height / 2);
+            offCtx.rotate(90 * Math.PI / 180);
+            offCtx.drawImage(imageObj, -imageObj.width / 2, -imageObj.height / 2);
+            
+            // 將旋轉後的圖片轉回 File 物件，以便正確傳送給後端 API
+            const dataUrl = offCanvas.toDataURL('image/jpeg', 0.95);
+            const arr = dataUrl.split(',');
+            const mime = arr[0].match(/:(.*?);/)[1];
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while(n--) { u8arr[n] = bstr.charCodeAt(n); }
+            
+            currentFile = new File([u8arr], "rotated.jpg", {type: mime});
+            imageObj.src = dataUrl; // 觸發 onload，自動重設畫布與呼叫 YOLO
+        });
+
+        // 呼叫 TensorFlow.js 在本機端進行 YOLO 預測
+        async function runYoloInference() {
+            if (!yoloModel) return false;
+            try {
+                // 1. 圖片前處理：轉 Tensor、縮放至 640x640、正規化並擴充維度 [1, 640, 640, 3]
+                const tensor = tf.browser.fromPixels(imageObj);
+                const resized = tf.image.resizeBilinear(tensor, [640, 640]);
+                const normalized = resized.div(255.0).expandDims(0);
+                
+                // 2. 執行推論
+                const predictions = await yoloModel.executeAsync(normalized);
+                const output0 = Array.isArray(predictions) ? predictions[0] : predictions;
+                
+                // 3. 解析輸出 [1, 37, 8400] -> 轉置為 [8400, 37] 方便迴圈處理
+                const data = output0.squeeze().transpose(); 
+                const dataArray = data.arraySync();
+                
+                let bestConf = 0;
+                let bestBox = null;
+                
+                // YOLOv8 輸出格式：[cx, cy, w, h, class0_prob, mask_weights...]
+                for (let i = 0; i < dataArray.length; i++) {
+                    const row = dataArray[i];
+                    const conf = row[4]; // 取得第一個類別(證件)的信心度
+                    if (conf > bestConf) {
+                        bestConf = conf;
+                        bestBox = { cx: row[0], cy: row[1], w: row[2], h: row[3] };
+                    }
+                }
+                
+                // 4. 清理 Tensor 釋放記憶體 (非常重要！)
+                tf.dispose([tensor, resized, normalized, predictions, output0, data]);
+                
+                // 5. 如果信心度大於 30%，將 640x640 的座標還原回真實照片解析度
+                if (bestBox && bestConf > 0.3) {
+                    const scaleX = imageObj.width / 640;
+                    const scaleY = imageObj.height / 640;
+                    
+                    const x1 = (bestBox.cx - bestBox.w / 2) * scaleX;
+                    const y1 = (bestBox.cy - bestBox.h / 2) * scaleY;
+                    const x2 = (bestBox.cx + bestBox.w / 2) * scaleX;
+                    const y2 = (bestBox.cy + bestBox.h / 2) * scaleY;
+                    
+                    points = [{x: x1, y: y1}, {x: x2, y: y1}, {x: x2, y: y2}, {x: x1, y: y2}];
+                    selectedIdx = 0; drawCanvas();
+                    return true;
+                }
+                return false;
+            } catch(e) { console.error("YOLO 推論失敗", e); return false; }
+        }
+
+        // 呼叫 OpenCV.js 在本機端自動抓 4 個角
+        function autoDetectCornersLocal() {
+            if (!cvReady) return;
+            try {
+                let src = cv.imread(imageObj);
+                let ratio = src.rows / 500.0;
+                if (ratio < 1.0) ratio = 1.0;
+                let dsize = new cv.Size(Math.round(src.cols / ratio), 500);
+                let resized = new cv.Mat();
+                cv.resize(src, resized, dsize, 0, 0, cv.INTER_AREA);
+
+                let gray = new cv.Mat();
+                cv.cvtColor(resized, gray, cv.COLOR_RGBA2GRAY, 0);
+                let blur = new cv.Mat();
+                cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+
+                let edged = new cv.Mat();
+                cv.Canny(blur, edged, 50, 150);
+
+                let M_morph = cv.Mat.ones(5, 5, cv.CV_8U);
+                cv.morphologyEx(edged, edged, cv.MORPH_CLOSE, M_morph, new cv.Point(-1, -1), 2);
+
+                let contours = new cv.MatVector();
+                let hierarchy = new cv.Mat();
+                cv.findContours(edged, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+                let sortableContours = [];
+                for (let i = 0; i < contours.size(); ++i) {
+                    let cnt = contours.get(i);
+                    let area = cv.contourArea(cnt);
+                    if (area > 1000) sortableContours.push({cnt: cnt, area: area});
+                    else cnt.delete();
+                }
+                sortableContours.sort((a, b) => b.area - a.area);
+
+                let found = false;
+                for (let i = 0; i < Math.min(5, sortableContours.length); ++i) {
+                    let cnt = sortableContours[i].cnt;
+                    let peri = cv.arcLength(cnt, true);
+                    let approx = new cv.Mat();
+                    for(let eps of [0.01, 0.02, 0.03, 0.04, 0.05]) {
+                        cv.approxPolyDP(cnt, approx, eps * peri, true);
+                        if (approx.rows === 4) {
+                            points = [
+                                {x: approx.data32S[0] * ratio, y: approx.data32S[1] * ratio},
+                                {x: approx.data32S[2] * ratio, y: approx.data32S[3] * ratio},
+                                {x: approx.data32S[4] * ratio, y: approx.data32S[5] * ratio},
+                                {x: approx.data32S[6] * ratio, y: approx.data32S[7] * ratio}
+                            ];
+                            found = true; approx.delete(); break;
+                        }
+                        approx.delete();
+                    }
+                    if (found) break;
+                }
+
+                src.delete(); resized.delete(); gray.delete(); blur.delete(); edged.delete(); M_morph.delete(); contours.delete(); hierarchy.delete();
+                for(let item of sortableContours) { if(!item.cnt.isDeleted()) item.cnt.delete(); }
+
+                if (found) {
+                    selectedIdx = 0; drawCanvas();
+                }
+            } catch (err) { console.error("AI 偵測失敗", err); }
+        }
+
+        // 繪製 Canvas
+        function drawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 取得濾鏡數值並轉換為 CSS Filter 語法以達到即時預覽效果
+            const b = document.getElementById('slider_b').value;
+            const c = document.getElementById('slider_c').value;
+            let s = document.getElementById('slider_s').value;
+            
+            const isGrayscale = document.getElementById('chkGrayscale').checked;
+            const isBinarize = document.getElementById('chkBinarize').checked;
+            
+            if (isGrayscale || isBinarize) s = 0; // 若選擇黑白/二值化，強制將預覽飽和度歸零
+            let extraFilter = isBinarize ? ' contrast(500%)' : ''; // 透過極高對比度來模擬二值化的視覺預覽效果
+            
+            ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)${extraFilter}`;
+            ctx.drawImage(imageObj, 0, 0);
+            ctx.filter = 'none'; // 繪製完圖片後關閉濾鏡，以免影響紅點與綠線的顏色
+            
+            // --- 繪製九宮格輔助線 ---
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; // 半透明白色
+            ctx.lineWidth = Math.max(1, (canvas.width * 0.002) / transform.scale); // 線寬隨縮放自動調細
+            ctx.setLineDash([5, 5]); // 設定為虛線效果，避免太搶眼
+            ctx.beginPath();
+            for (let i = 1; i <= 2; i++) {
+                // 垂直線 (1/3 與 2/3 處)
+                ctx.moveTo(canvas.width * (i / 3), 0);
+                ctx.lineTo(canvas.width * (i / 3), canvas.height);
+                // 水平線 (1/3 與 2/3 處)
+                ctx.moveTo(0, canvas.height * (i / 3));
+                ctx.lineTo(canvas.width, canvas.height * (i / 3));
+            }
+            ctx.stroke();
+            ctx.restore();
+            
+            if (points.length !== 4) return;
+            
+            // 畫線
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = (canvas.width * 0.005) / transform.scale; 
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < 4; i++) ctx.lineTo(points[i].x, points[i].y);
+            ctx.closePath();
+            ctx.stroke();
+
+            // 畫點
+            const radius = (canvas.width * 0.02) / transform.scale; 
+            points.forEach((p, i) => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, (i === draggingIdx || i === selectedIdx) ? radius * 1.5 : radius, 0, 2 * Math.PI);
+                if (i === selectedIdx) {
+                    ctx.fillStyle = 'rgba(255, 255, 0, 0.9)'; // 選取狀態：黃色
+                    ctx.fill();
+                    ctx.lineWidth = (canvas.width * 0.005) / transform.scale;
+                    ctx.strokeStyle = '#FF0000';
+                    ctx.stroke();
+                } else {
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.8)'; // 一般狀態：紅色
+                    ctx.fill();
+                }
+            });
+
+            // --- 放大鏡 (Magnifier) 功能 ---
+            const activeIdx = draggingIdx !== -1 ? draggingIdx : selectedIdx;
+            if (activeIdx !== -1) {
+                const pt = points[activeIdx];
+                const zoomFactor = 3; // 放大倍率
+                const magDispSize = (canvas.width * 0.3) / transform.scale; // 放大鏡實體大小保持不變
+                const margin = (canvas.width * 0.02) / transform.scale;     
+                
+                // 決定放大鏡擺放位置：若手指在畫面左側，放大鏡放右邊；反之放左側避免遮擋
+                const magX = (pt.x < canvas.width / 2) ? canvas.width - magDispSize - margin : margin;
+                const magY = margin;
+                
+                const magCx = magX + magDispSize / 2;
+                const magCy = magY + magDispSize / 2;
+                const magRadius = magDispSize / 2;
+                
+                ctx.save();
+                
+                // 畫放大鏡的圓形路徑並設定剪裁 (clip)
+                ctx.beginPath();
+                ctx.arc(magCx, magCy, magRadius, 0, 2 * Math.PI);
+                ctx.fillStyle = '#000000';
+                ctx.fill();
+                
+                // 限制接下來的繪圖只出現在圓形內
+                ctx.clip();
+                
+                // 將座標系原點移到放大鏡「中心」，並放大
+                ctx.save();
+                ctx.translate(magCx, magCy);
+                ctx.scale(zoomFactor, zoomFactor);
+                
+                // 放大鏡內的圖片也套用相同的即時濾鏡
+                ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)${extraFilter}`;
+                ctx.drawImage(imageObj, -pt.x, -pt.y);
+                ctx.filter = 'none';
+                
+                ctx.restore(); // 恢復比例與原點，但保留圓形 clip 狀態
+                
+                // 在放大鏡上方疊加畫上綠色「十字對準線」
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = (canvas.width * 0.003) / transform.scale;
+                ctx.beginPath();
+                ctx.moveTo(magCx, magCy - magRadius);
+                ctx.lineTo(magCx, magCy + magRadius);
+                ctx.moveTo(magCx - magRadius, magCy);
+                ctx.lineTo(magCx + magRadius, magCy);
+                ctx.stroke();
+                
+                // 在放大鏡內部下方顯示即時像素座標 (超出圓形範圍的黑底會被自動隱藏)
+                const textBarHeight = magDispSize * 0.18; // 資訊條高度
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';     // 半透明黑底
+                ctx.fillRect(magX, magY + magDispSize - textBarHeight, magDispSize, textBarHeight);
+                ctx.fillStyle = '#00FF00';                // 綠色螢光字
+                ctx.font = `bold ${textBarHeight * 0.7}px monospace`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`X:${Math.round(pt.x)} Y:${Math.round(pt.y)}`, magCx, magCy + magRadius - textBarHeight / 2);
+                ctx.restore();
+                
+                // 畫上白色的圓形外框 (在 clip 取消後畫，確保外框完整且清晰)
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(magCx, magCy, magRadius, 0, 2 * Math.PI);
+                ctx.lineWidth = (canvas.width * 0.005) / transform.scale;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // 處理手機觸控拖拉邏輯
+        function getPointerPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            // 將螢幕點擊座標換算回圖片的真實解析度座標
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        // 呼叫 OpenCV.js 執行本機端局部邊緣吸附
+        function snapPoint(idx) {
+            if (!cvReady || !document.getElementById('autoSnap').checked) return;
+            const pt = points[idx];
+            
+            // 動態計算裁切半徑 (取圖片長寬最大值的 3% 作為搜尋範圍)
+            const cropR = Math.floor(Math.max(imageObj.width, imageObj.height) * 0.03);
+            
+            const offCanvas = document.getElementById('offscreenCanvas');
+            offCanvas.width = cropR * 2;
+            offCanvas.height = cropR * 2;
+            const offCtx = offCanvas.getContext('2d');
+            
+            // 從原圖擷取該點附近的局部區域 (drawImage 會自動處理超出邊界的黑邊)
+            offCtx.drawImage(imageObj, pt.x - cropR, pt.y - cropR, cropR * 2, cropR * 2, 0, 0, cropR * 2, cropR * 2);
+            
+            try {
+                let src = cv.imread('offscreenCanvas');
+                let gray = new cv.Mat();
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+                let blur = new cv.Mat();
+                cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+                
+                let corners = new cv.Mat();
+                let mask = new cv.Mat();
+                cv.goodFeaturesToTrack(blur, corners, 5, 0.02, 5, mask, 15);
+                
+                if (corners.rows > 0) {
+                    let cx = cropR, cy = cropR;
+                    let bestDist = Infinity, bestX = 0, bestY = 0;
+                    for (let i = 0; i < corners.rows; i++) {
+                        let x = corners.data32F[i * 2], y = corners.data32F[i * 2 + 1];
+                        let dist = (x - cx) ** 2 + (y - cy) ** 2;
+                        if (dist < bestDist) { bestDist = dist; bestX = x; bestY = y; }
+                    }
+                    points[idx].x += (bestX - cx);
+                    points[idx].y += (bestY - cy);
+                    drawCanvas();
+                }
+                src.delete(); gray.delete(); blur.delete(); corners.delete(); mask.delete();
+            } catch (e) { console.error("自動吸附失敗", e); }
+        }
+
+        // 重構後的觸控事件：支援兩指縮放、單指平移與拖拉點
+        canvas.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (activePointers.size === 2) {
+                // 開始兩指縮放
+                draggingIdx = -1;
+                isDragging = false;
+                lastPanPoint = null;
+                const pts = Array.from(activePointers.values());
+                initialPinchDistance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                initialPinchCenter = { x: (pts[0].x + pts[1].x)/2, y: (pts[0].y + pts[1].y)/2 };
+                initialTransform = { ...transform };
+                drawCanvas(); // 取消選取狀態
+                return;
+            }
+
+            if (activePointers.size === 1) {
+                const pos = getPointerPos(e);
+                // 調整觸控判定半徑，確保放大後觸控範圍不會縮水
+                const hitRadius = (canvas.width * 0.08) / transform.scale; 
+                
+                draggingIdx = points.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
+                if (draggingIdx !== -1) {
+                    selectedIdx = draggingIdx;
+                    isDragging = false;
+                    lastPanPoint = null;
+                } else {
+                    selectedIdx = -1; // 點擊空白處
+                    lastPanPoint = { x: e.clientX, y: e.clientY }; // 準備單指平移
+                }
+                drawCanvas();
+            }
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            e.preventDefault();
+            if (!activePointers.has(e.pointerId)) return;
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (activePointers.size === 2 && initialPinchDistance) {
+                // 執行兩指縮放與平移
+                const pts = Array.from(activePointers.values());
+                const currentDistance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                const currentCenter = { x: (pts[0].x + pts[1].x)/2, y: (pts[0].y + pts[1].y)/2 };
+
+                const scaleDiff = currentDistance / initialPinchDistance;
+                let newScale = initialTransform.scale * scaleDiff;
+                newScale = Math.max(0.5, Math.min(newScale, 10)); // 限制縮放比例 0.5x ~ 10x
+
+                const scaleRatio = newScale / initialTransform.scale;
+                const newX = currentCenter.x - (initialPinchCenter.x - initialTransform.x) * scaleRatio;
+                const newY = currentCenter.y - (initialPinchCenter.y - initialTransform.y) * scaleRatio;
+
+                transform = { scale: newScale, x: newX, y: newY };
+                updateCanvasTransform();
+                return;
+            }
+
+            if (activePointers.size === 1) {
+                if (draggingIdx !== -1) {
+                    points[draggingIdx] = getPointerPos(e);
+                    isDragging = true;
+                    drawCanvas();
+                } else if (lastPanPoint) {
+                    // 單指平移畫布
+                    const dx = e.clientX - lastPanPoint.x;
+                    const dy = e.clientY - lastPanPoint.y;
+                    transform.x += dx;
+                    transform.y += dy;
+                    lastPanPoint = { x: e.clientX, y: e.clientY };
+                    updateCanvasTransform();
+                }
+            }
+        });
+
+        const pointerUpHandler = (e) => {
+            e.preventDefault();
+            activePointers.delete(e.pointerId);
+
+            if (activePointers.size < 2) {
+                initialPinchDistance = null;
+            }
+
+            if (activePointers.size === 0) {
+                if (draggingIdx !== -1 && isDragging) {
+                    snapPoint(draggingIdx);
+                }
+                draggingIdx = -1;
+                isDragging = false;
+                lastPanPoint = null;
+                drawCanvas();
+            } else if (activePointers.size === 1) {
+                // 從兩指變回單指時，將剩餘的手指設為平移起點，防止畫面跳動
+                const remaining = Array.from(activePointers.values())[0];
+                lastPanPoint = { x: remaining.x, y: remaining.y };
+                draggingIdx = -1;
+            }
+        };
+
+        canvas.addEventListener('pointerup', pointerUpHandler);
+        canvas.addEventListener('pointercancel', pointerUpHandler);
+        canvas.addEventListener('pointerout', pointerUpHandler);
+
+        // 方向鍵微調邏輯
+        const nudgePoint = (dx, dy) => {
+            if (selectedIdx === -1) return;
+            const step = parseInt(document.getElementById('nudgeStep').value, 10);
+            points[selectedIdx].x += dx * step;
+            points[selectedIdx].y += dy * step;
+            drawCanvas();
+        };
+        document.getElementById('btnUp').addEventListener('click', () => nudgePoint(0, -1));
+        document.getElementById('btnDown').addEventListener('click', () => nudgePoint(0, 1));
+        document.getElementById('btnLeft').addEventListener('click', () => nudgePoint(-1, 0));
+        document.getElementById('btnRight').addEventListener('click', () => nudgePoint(1, 0));
+
+        // 呼叫 OpenCV.js 在本機端處理圖片
+        processBtn.addEventListener('click', async () => {
+            if (!cvReady) return;
+            loading.style.display = 'block'; processBtn.disabled = true;
+            
+            // 給予 UI 渲染 Loading 字樣的時間
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            try {
+                let src = cv.imread(imageObj);
+                
+                // 排序 4 個點 (tl, tr, br, bl)
+                let sums = points.map(p => p.x + p.y);
+                let diffs = points.map(p => p.x - p.y);
+                let tl = points[sums.indexOf(Math.min(...sums))];
+                let br = points[sums.indexOf(Math.max(...sums))];
+                let tr = points[diffs.indexOf(Math.max(...diffs))];
+                let bl = points[diffs.indexOf(Math.min(...diffs))];
+                
+                let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
+                
+                let wA = Math.hypot(br.x - bl.x, br.y - bl.y);
+                let wB = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+                let maxWidth = Math.max(wA, wB);
+                
+                let hA = Math.hypot(tr.x - br.x, tr.y - br.y);
+                let hB = Math.hypot(tl.x - bl.x, tl.y - bl.y);
+                let maxHeight = Math.max(hA, hB);
+                
+                let selectedRatio = parseFloat(document.getElementById('aspectRatio').value);
+                let finalW, finalH;
+                if (selectedRatio === 0) {
+                    finalW = Math.round(maxWidth); finalH = Math.round(maxHeight);
+                } else {
+                    if (maxWidth >= maxHeight) { finalW = Math.round(maxWidth); finalH = Math.round(maxWidth / selectedRatio); }
+                    else { finalH = Math.round(maxHeight); finalW = Math.round(maxHeight / selectedRatio); }
+                }
+                
+                // --- 根據使用者選擇限制最大輸出像素 ---
+                let outRes = parseInt(document.getElementById('outputResolution').value, 10);
+                let currentMaxDim = Math.max(finalW, finalH);
+                if (outRes > 0 && currentMaxDim > outRes) {
+                    let scale = outRes / currentMaxDim;
+                    finalW = Math.round(finalW * scale);
+                    finalH = Math.round(finalH * scale);
+                }
+                
+                let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, finalW - 1, 0, finalW - 1, finalH - 1, 0, finalH - 1]);
+                let M = cv.getPerspectiveTransform(srcTri, dstTri);
+                
+                let warped = new cv.Mat();
+                cv.warpPerspective(src, warped, M, new cv.Size(finalW, finalH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+                
+                // 處理濾鏡
+                let b = parseFloat(document.getElementById('slider_b').value) - 100;
+                let c = parseFloat(document.getElementById('slider_c').value) / 100.0;
+                let s = parseFloat(document.getElementById('slider_s').value) / 100.0;
+                let sharp = parseFloat(document.getElementById('slider_sharp').value) / 100.0;
+                
+                let base_enhanced = warped.clone();
+                if (sharp > 0) {
+                    let max_sharpened = new cv.Mat();
+                    let kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
+                    cv.filter2D(warped, max_sharpened, -1, kernel);
+                    cv.addWeighted(max_sharpened, sharp, warped, 1.0 - sharp, 0, base_enhanced);
+                    max_sharpened.delete(); kernel.delete();
+                }
+                
+                let temp_img = base_enhanced.clone();
+                if (s !== 1.0) {
+                    let hsv = new cv.Mat();
+                    cv.cvtColor(base_enhanced, hsv, cv.COLOR_RGBA2RGB); // 先確保轉為 RGB
+                    cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
+                    let channels = new cv.MatVector();
+                    cv.split(hsv, channels);
+                    let sat = channels.get(1);
+                    sat.convertTo(sat, -1, s, 0);
+                    channels.set(1, sat);
+                    cv.merge(channels, hsv);
+                    cv.cvtColor(hsv, temp_img, cv.COLOR_HSV2RGB);
+                    cv.cvtColor(temp_img, temp_img, cv.COLOR_RGB2RGBA);
+                    hsv.delete(); channels.delete(); sat.delete();
+                }
+                
+                let final_result = new cv.Mat();
+                temp_img.convertTo(final_result, -1, c, b);
+                
+                // 處理黑白化與二值化 (OpenCV 實際運算)
+                const isGrayscale = document.getElementById('chkGrayscale').checked;
+                const isBinarize = document.getElementById('chkBinarize').checked;
+                if (isGrayscale || isBinarize) {
+                    let grayMat = new cv.Mat();
+                    cv.cvtColor(final_result, grayMat, cv.COLOR_RGBA2GRAY, 0);
+                    if (isBinarize) {
+                        // 採用固定閾值 127。由於使用者會先拉動亮度和對比度，這等同於讓使用者自己控制二值化的靈敏度！
+                        cv.threshold(grayMat, grayMat, 127, 255, cv.THRESH_BINARY);
+                    }
+                    cv.cvtColor(grayMat, final_result, cv.COLOR_GRAY2RGBA, 0);
+                    grayMat.delete();
+                }
+                
+                // 將 OpenCV 圖片畫到隱藏畫布並轉換為 Base64
+                cv.imshow('offscreenCanvas', final_result);
+                document.getElementById('resultImage').src = document.getElementById('offscreenCanvas').toDataURL('image/jpeg', 0.95);
+                document.getElementById('resultSize').textContent = ''; // 清空舊的檔案大小
+                document.getElementById('resultResolution').textContent = `📐 圖片尺寸：${finalW} x ${finalH} 像素`;
+                
+                src.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+                base_enhanced.delete(); temp_img.delete(); final_result.delete();
+                
+                loading.style.display = 'none'; processBtn.disabled = false;
+                document.getElementById('editorCard').style.display = 'none';
+                floatingControls.classList.remove('visible');
+                document.body.classList.remove('controls-visible');
+                document.getElementById('resultCard').style.display = 'block';
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                
+            } catch(err) {
+                console.error("OpenCV Processing Error:", err);
+                alert("處理圖片時發生錯誤！");
+                loading.style.display = 'none'; processBtn.disabled = false;
+            }
+        });
+
+        // 格式化檔案大小
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        // 處理下載圖片邏輯
+        downloadBtn.addEventListener('click', () => {
+            const dataUrl = document.getElementById('resultImage').src;
+            if (!dataUrl || !dataUrl.startsWith('data:image')) return;
+            
+            // 將 Base64 轉換為 Blob 進行下載，解決手機瀏覽器因網址過長導致下載無反應的問題
+            fetch(dataUrl)
+                .then(res => res.blob())
+                .then(blob => {
+                    document.getElementById('resultSize').textContent = `| 💾 檔案大小：${formatBytes(blob.size)}`;
+                    const blobUrl = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.download = 'id_card_processed.jpg';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(blobUrl); // 釋放記憶體
+                });
+        });
+
+        // 處理重新調整邏輯
+        reeditBtn.addEventListener('click', () => {
+            document.getElementById('resultCard').style.display = 'none';
+            document.getElementById('editorCard').style.display = 'block';
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // 平滑捲動回編輯區
+        });
+
+        // 註冊 Service Worker，啟用 PWA 離線快取能力
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('✅ ServiceWorker 註冊成功'))
+                    .catch(err => console.log('⚠️ ServiceWorker 註冊失敗:', err));
+            });
+        }
+    </script>
+</body>
+</html>
