@@ -43,10 +43,6 @@
 *   **前端:**
     *   純 HTML5 / CSS3 / JavaScript (Vanilla JS)。
     *   Progressive Web App (PWA) 技術，包含 Manifest 與 Service Worker。
-*   **開發與訓練環境 (可選):**
-    *   Python 3.11+
-    *   `main.py`: 用於收集訓練資料的桌面版 GUI 工具。
-    *   `train_yolo.py`: 用於訓練 YOLOv8-seg 模型的腳本。
 
 ---
 
@@ -69,38 +65,6 @@
 
 4.  **等待部署:**
     *   等待約 2-5 分鐘，當頁面上方顯示 "Your site is live at..." 時，即可透過該網址存取。
-
----
-
-## 🔄 開發與訓練流程 (可選)
-
-如果您想訓練自己的 AI 模型來提升辨識率，可以遵循以下流程：
-
-1.  **安裝依賴:**
-    ```bash
-    pip install opencv-python ultralytics
-    ```
-
-2.  **收集資料:**
-    *   執行 `python main.py`。
-    *   程式會開啟桌面版 GUI，手動微調圖片的四個角並按下 Enter。
-    *   每次操作，完美的標記資料會自動儲存至 `id_dataset` 資料夾。
-
-3.  **訓練模型:**
-    *   當您收集了足夠的樣本（建議 10 張以上）後，執行：
-    ```bash
-    python train_yolo.py
-    ```
-
-4.  **匯出模型:**
-    *   訓練完成後，新的權重會存在 `runs/segment/id_card_seg/weights/best.pt`。
-    *   執行以下指令將其轉換為網頁格式：
-    ```bash
-    yolo export model=runs/segment/id_card_seg/weights/best.pt format=tfjs
-    ```
-
-5.  **替換並部署:**
-    *   將新產生的 `best_web_model` 資料夾替換掉您部署資料夾中的 `model_web`，然後 Push 到 GitHub 即可完成模型升級！
 
 ---
 
