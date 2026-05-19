@@ -1,4 +1,4 @@
-const CACHE_NAME = 'id-scanner-v4';
+const CACHE_NAME = 'id-scanner-v5'; // 更新版本號以觸發 PWA 強制更新
 const urlsToCache = [
     './',
     './manifest.json',

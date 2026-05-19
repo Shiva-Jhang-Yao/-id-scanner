@@ -10,12 +10,6 @@
     <meta name="theme-color" content="#007bff">
     <link rel="apple-touch-icon" href="./icon.svg">
     
-    <!-- 引入 TensorFlow.js (預備掛載 YOLO tfjs 模型) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <!-- 引入 OpenCV.js (本機端影像運算核心) -->
-    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()"></script>
-    <!-- 引入 jsPDF (匯出 PDF 功能) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -1213,5 +1207,10 @@
             });
         }
     </script>
+
+    <!-- 引入外部套件 (移至底部以解決 Service Worker 快取導致的載入順序問題) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()"></script>
 </body>
 </html>
