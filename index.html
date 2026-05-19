@@ -15,15 +15,16 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #f4f6f8;
             margin: 0;
-            padding: 15px;
+            padding: 10px;
             color: #333;
+            -webkit-tap-highlight-color: transparent; /* 移除手機點擊時醜醜的預設灰色反白，改用自訂的按鈕動畫 */
         }
         .card {
             background: white;
             border-radius: 12px;
-            padding: 15px;
+            padding: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
         h2 { margin-top: 0; font-size: 1.2rem; }
         
@@ -31,9 +32,12 @@
         .canvas-container {
             position: relative;
             width: 100%;
+            height: 45vh; /* 動態限制高度，保證畫面絕不超長滾動 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
             overflow: hidden; /* 確保放大的圖片不會超出範圍 */
-            text-align: center;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
             border: 1px solid #ccc;
             border-radius: 8px;
             background-color: #222; /* 縮放時露出的底色 */
@@ -41,20 +45,20 @@
         canvas {
             display: block;
             max-width: 100%;
-            height: auto;
+            max-height: 100%;
             touch-action: none; /* 防止在 canvas 上滑動時觸發網頁捲動 */
             transform-origin: 0 0; /* 縮放原點設為左上角 */
             will-change: transform;
         }
         
         /* 濾鏡拉桿設計 */
-        .slider-group { margin-bottom: 10px; }
-        .slider-group label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 5px; }
-        input[type="range"] { width: 100%; }
+        .slider-group { margin-bottom: 6px; }
+        .slider-group label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 2px; }
+        input[type="range"] { width: 100%; margin: 2px 0; }
         
         button {
             width: 100%;
-            padding: 14px;
+            padding: 12px;
             font-size: 1rem;
             font-weight: bold;
             color: white;
@@ -62,34 +66,60 @@
             border: none;
             border-radius: 8px;
             cursor: pointer;
+            /* 加入按鈕響應式動畫 (物理回彈效果) */
+            transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s ease, box-shadow 0.2s ease;
         }
-        button:disabled { background-color: #ccc; }
+        button:hover:not(:disabled) {
+            filter: brightness(1.05);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+        button:active:not(:disabled) {
+            transform: scale(0.96); /* 按下時微縮小 */
+            filter: brightness(0.95);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        button:disabled { background-color: #ccc; cursor: not-allowed; opacity: 0.7; }
         
         /* 結果顯示區 */
         #resultImage { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd; }
         .data-box { background: #e9ecef; padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 1rem; }
         
         #loading { display: none; text-align: center; color: #007bff; font-weight: bold; margin-bottom: 10px; }
-        /* 拍照與上傳按鈕 */
-        .upload-wrapper { display: flex; gap: 10px; }
-        .btn-upload {
-            flex: 1;
-            padding: 14px;
-            font-size: 1rem;
-            font-weight: bold;
-            color: white;
-            background-color: #28a745;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            text-align: center;
+        /* 拍照與上傳按鈕 (新版精美 UI) */
+        @keyframes pulse-shadow {
+            0% { box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3); }
+            50% { box-shadow: 0 4px 25px rgba(0, 198, 255, 0.6); }
+            100% { box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3); }
         }
-        .btn-gallery { background-color: #17a2b8; }
+        .btn-primary-cam {
+            width: 100%; padding: 24px 10px; margin-bottom: 10px;
+            background: linear-gradient(135deg, #007bff, #00c6ff);
+            color: white; border: none; border-radius: 16px; cursor: pointer;
+            animation: pulse-shadow 3s infinite ease-in-out;
+            transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s ease;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .btn-primary-cam:active { transform: scale(0.96); filter: brightness(0.95); animation: none; }
+        .btn-secondary {
+            flex: 1; padding: 14px 4px; background: white; color: #495057;
+            border: 2px solid #e9ecef; border-radius: 12px; font-weight: bold; font-size: 0.95rem;
+            cursor: pointer; transition: transform 0.1s, background-color 0.2s, border-color 0.2s;
+        }
+        .btn-secondary:active { transform: scale(0.96); background: #f8f9fa; border-color: #ced4da; }
         
         /* 方向鍵微調 */
-        .nudge-group { display: flex; gap: 8px; justify-content: center; margin-bottom: 15px; }
-        .btn-nudge { background-color: #6c757d; padding: 10px; font-size: 1.2rem; flex: 1; border-radius: 8px; border: none; color: white; cursor: pointer; }
-        .hint-text { text-align: center; font-size: 0.85rem; color: #666; margin-bottom: 10px; }
+        .btn-nudge { background-color: #6c757d; padding: 8px 0; font-size: 1.1rem; width: 100%; border-radius: 6px; border: none; color: white; cursor: pointer; }
+        .hint-text { text-align: center; font-size: 0.75rem; color: #666; margin-bottom: 8px; }
+
+        /* 下拉選單點擊與聚焦效果 */
+        select {
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            outline: none;
+        }
+        select:focus {
+            border-color: #007bff !important;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25) !important;
+        }
 
         /* 懸浮控制面板 */
         #floatingControls {
@@ -114,88 +144,156 @@
         body.controls-visible {
             padding-bottom: 380px; /* 預留空間避免內容被覆蓋 */
         }
+
+        /* 掃描動畫教學區 */
+        .scanner-demo {
+            position: relative;
+            width: 48px;
+            height: 64px;
+            background: white;
+            border: 2px solid #adb5bd;
+            border-radius: 6px;
+            margin: 0 auto 12px auto;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .scanner-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: rgba(0, 123, 255, 0.8);
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.8);
+            animation: scan 2s infinite ease-in-out;
+        }
+        @keyframes scan {
+            0% { top: -5px; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 68px; opacity: 0; }
+        }
     </style>
 </head>
-<body>
+<body ontouchstart=""> <!-- 加上 ontouchstart 讓 iOS Safari 能完美觸發 button:active 點擊特效 -->
 
     <div id="cvLoading" style="text-align: center; margin: 20px; font-weight: bold; color: #007bff;">
         ⚙️ 正在載入本機端 AI 與影像引擎，請稍候...
     </div>
 
+    <!-- 多頁文件購物車提示 -->
+    <div class="card" id="pdfCart" style="display: none; background-color: #e3f2fd; border: 2px dashed #007bff; margin-top: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; font-size: 1rem; color: #007bff;">📄 多頁文件：<span id="pdfPageCount">0</span> 頁</h3>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end;">
+                <button id="btnPreviewPdfCart" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #17a2b8; margin: 0;">👀 預覽</button>
+                <button id="btnClearPdfCart" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #dc3545; margin: 0;">🗑️ 清空</button>
+                <button id="btnGenerateMultiPdf" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #007bff; margin: 0;">📥 匯出</button>
+            </div>
+        </div>
+    </div>
+
     <div class="card" id="uploadCard" style="display: none;">
-        <h2>📷 1. 拍照或選擇照片</h2>
-        <div class="upload-wrapper">
-            <button class="btn-upload" onclick="document.getElementById('cameraInput').click()">📸 直接拍照</button>
-            <button class="btn-upload btn-gallery" onclick="document.getElementById('galleryInput').click()">🖼️ 相簿選取</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h2 style="margin: 0; font-size: 1.1rem;">📷 1. 載入照片</h2>
+        </div>
+        <button class="btn-primary-cam" onclick="document.getElementById('cameraInput').click()">
+            <span style="font-size: 3rem; margin-bottom: 8px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));">📸</span>
+            <span style="font-size: 1.25rem; font-weight: 900; letter-spacing: 1px;">拍攝證件 / 文件</span>
+            <span style="font-size: 0.85rem; font-weight: normal; opacity: 0.9; margin-top: 6px;">開啟相機，準備對齊邊緣</span>
+        </button>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-secondary" onclick="document.getElementById('galleryInput').click()">🖼️ 相簿選取</button>
+            <button class="btn-secondary" id="btnPaste">📋 剪貼簿貼上</button>
         </div>
         <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
         <input type="file" id="galleryInput" accept="image/*" style="display: none;">
+
+        <!-- 教學動畫與步驟指引 -->
+        <div style="margin-top: 25px; padding: 20px 10px; background: #f8f9fa; border-radius: 12px; text-align: center; border: 1px dashed #d6d8db;">
+            <!-- 純 CSS 繪製的文件與掃描光條 -->
+            <div class="scanner-demo">
+                <div style="position: absolute; top: 12px; left: 8px; right: 8px; height: 5px; background: #e9ecef; border-radius: 3px;"></div>
+                <div style="position: absolute; top: 26px; left: 8px; right: 16px; height: 5px; background: #e9ecef; border-radius: 3px;"></div>
+                <div style="position: absolute; top: 40px; left: 8px; right: 12px; height: 5px; background: #e9ecef; border-radius: 3px;"></div>
+                <div class="scanner-line"></div>
+            </div>
+            <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: #495057;">💡 快速掃描 3 步驟</h3>
+            <div style="display: flex; justify-content: space-around; align-items: center; font-size: 0.8rem; color: #6c757d; font-weight: bold; padding: 0 5px;">
+                <span>📸 1. 拍下文件</span>
+                <span style="color: #ced4da;">➔</span>
+                <span>🎯 2. AI 對齊</span>
+                <span style="color: #ced4da;">➔</span>
+                <span>📥 3. 匯出 PDF</span>
+            </div>
+        </div>
     </div>
 
     <div class="card" id="editorCard" style="display: none;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
-            <h2 style="margin-bottom: 0; line-height: 34px;">🎯 2. 微調四個角落</h2>
-            <div style="text-align: right;">
-                <div>
-                    <button id="openFiltersBtn" style="width: auto; padding: 6px 12px; font-size: 0.9rem; background-color: #17a2b8; margin: 0 5px;">🎛️ 濾鏡</button>
-                    <button id="btnRotate" style="width: auto; padding: 6px 12px; font-size: 0.9rem; background-color: #6c757d; margin: 0;">🔃 旋轉</button>
-                </div>
-                <div id="filterActiveHint" style="display: none; font-size: 0.8rem; color: #ff9800; font-weight: bold; margin-top: 5px; margin-right: 5px;">✨ 濾鏡已套用</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button id="btnRetake" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #6c757d; margin: 0;">🔙 重拍</button>
+                <h2 style="margin: 0; font-size: 1.1rem;">🎯 微調</h2>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end;">
+                <span id="filterActiveHint" style="display: none; font-size: 0.75rem; color: #ff9800; font-weight: bold;">✨ 已套用濾鏡</span>
+                <button id="openFiltersBtn" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #17a2b8; margin: 0;">🎛️ 濾鏡</button>
+                <button id="btnRotate" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #6c757d; margin: 0;">🔃 旋轉</button>
             </div>
         </div>
         <div class="canvas-container">
             <canvas id="canvas"></canvas>
         </div>
-        <div class="hint-text">👆 點擊角落(紅點)或邊緣(藍方塊)選取後，下方按鈕微調</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: auto auto auto; align-items: center; justify-items: center; gap: 8px; margin-bottom: 15px;">
-            <div style="grid-column: 2 / 3; grid-row: 1 / 2;"><button id="btnUp" class="btn-nudge">⬆️</button></div>
-            <div style="grid-column: 1 / 2; grid-row: 2 / 3;"><button id="btnLeft" class="btn-nudge">⬅️</button></div>
-            <div style="grid-column: 2 / 3; grid-row: 2 / 3;">
-                <select id="nudgeStep" style="padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; height: 100%;">
-                    <option value="1">1px</option>
-                    <option value="5" selected>5px</option>
-                    <option value="10">10px</option>
-                    <option value="50">50px</option>
-                </select>
-            </div>
-            <div style="grid-column: 3 / 4; grid-row: 2 / 3;"><button id="btnRight" class="btn-nudge">➡️</button></div>
-            <div style="grid-column: 2 / 3; grid-row: 3 / 4;"><button id="btnDown" class="btn-nudge">⬇️</button></div>
-        </div>
-        <div style="text-align: center; margin-bottom: 15px;">
-            <label style="cursor: pointer; font-size: 0.9rem; color: #007bff; font-weight: bold; display: block; margin-bottom: 8px;">
-                <input type="checkbox" id="autoSnap" checked> 🧲 啟用邊緣自動吸附 (放開手指時生效)
-            </label>
-            <div id="snapStrengthContainer" style="transition: opacity 0.3s;">
-                <label for="snapStrength" style="font-size: 0.9rem; color: #666;">吸附力道: <span id="snapStrengthValue">弱</span></label>
-                <input type="range" id="snapStrength" min="1" max="5" value="2" style="width: 50%; max-width: 200px; vertical-align: middle;">
-            </div>
-        </div>
+        <div class="hint-text">👆 點擊角落/邊緣後，使用下方工具微調與設定</div>
         
-        <h2>📐 3. 裁切與輸出設定</h2>
-        <div style="margin-bottom: 10px;">
-            <label style="font-size: 0.9rem; color: #666;">裁切比例：</label>
-            <select id="aspectRatio" style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem;">
-                <option value="1.586">💳 標準證件 (約 1.586:1)</option>
-                <option value="1.414">📄 A4 文件 (約 1.414:1)</option>
-                <option value="1.333">📸 4:3 照片</option>
-                <option value="1.778">📺 16:9 螢幕</option>
-                <option value="0">✂️ 自由比例 (依選取框大小)</option>
-            </select>
-        </div>
-        <div style="margin-bottom: 15px;">
-            <label style="font-size: 0.9rem; color: #666;">輸出尺寸 (若超過將自動縮小)：</label>
-            <select id="outputResolution" style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem;">
-                <option value="0">🌟 原始大小 (最高畫質)</option>
-                <option value="1920">📱 高畫質 (長邊最高 1920px)</option>
-                <option value="1080">💻 標準畫質 (長邊最高 1080px)</option>
-                <option value="800">🌐 網路傳輸 (長邊最高 800px)</option>
-            </select>
+        <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+            <!-- 左側：十字方向鍵 -->
+            <div style="flex: 1; display: grid; grid-template-columns: 1fr 1.2fr 1fr; grid-template-rows: auto auto auto; gap: 4px; align-items: center; justify-items: center;">
+                <div style="grid-column: 2 / 3; grid-row: 1 / 2; width: 100%;"><button id="btnUp" class="btn-nudge">⬆️</button></div>
+                <div style="grid-column: 1 / 2; grid-row: 2 / 3; width: 100%;"><button id="btnLeft" class="btn-nudge">⬅️</button></div>
+                <div style="grid-column: 2 / 3; grid-row: 2 / 3; width: 100%;">
+                    <select id="nudgeStep" style="padding: 6px 0; border-radius: 6px; border: 1px solid #ccc; font-size: 0.85rem; width: 100%; text-align: center; appearance: none; background: white;">
+                        <option value="1">1px</option>
+                        <option value="5" selected>5px</option>
+                        <option value="10">10px</option>
+                        <option value="50">50px</option>
+                    </select>
+                </div>
+                <div style="grid-column: 3 / 4; grid-row: 2 / 3; width: 100%;"><button id="btnRight" class="btn-nudge">➡️</button></div>
+                <div style="grid-column: 2 / 3; grid-row: 3 / 4; width: 100%;"><button id="btnDown" class="btn-nudge">⬇️</button></div>
+            </div>
+            
+            <!-- 右側：設定與吸附 -->
+            <div style="flex: 1.2; display: flex; flex-direction: column; justify-content: space-between; gap: 6px;">
+                <select id="aspectRatio" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.85rem; width: 100%;">
+                    <option value="1.586">💳 證件 (1.586:1)</option>
+                    <option value="1.414">📄 A4 (1.414:1)</option>
+                    <option value="1.333">📸 4:3 照片</option>
+                    <option value="1.778">📺 16:9 螢幕</option>
+                    <option value="0">✂️ 自由比例</option>
+                </select>
+                <select id="outputResolution" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.85rem; width: 100%;">
+                    <option value="0">🌟 原始畫質</option>
+                    <option value="1920">📱 高畫質 1920px</option>
+                    <option value="1080">💻 標準 1080px</option>
+                    <option value="800">🌐 網路 800px</option>
+                </select>
+                <div style="background: #f8f9fa; padding: 6px; border-radius: 6px; border: 1px solid #e2e2e2;">
+                    <label style="cursor: pointer; font-size: 0.8rem; color: #007bff; font-weight: bold; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
+                        <input type="checkbox" id="autoSnap" checked style="margin: 0;"> 🧲 自動吸附
+                    </label>
+                    <div id="snapStrengthContainer" style="display: flex; align-items: center; gap: 5px; transition: opacity 0.3s;">
+                        <span style="font-size: 0.75rem; color: #666; white-space: nowrap;">力道:<span id="snapStrengthValue">弱</span></span>
+                        <input type="range" id="snapStrength" min="1" max="5" value="2" style="width: 100%; margin: 0;">
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div id="loading">⏳ 處理中，請稍候...</div>
+        <div id="loading" style="display: none; text-align: center; font-size: 0.9rem; margin-bottom: 8px;">⏳ 處理中...</div>
         <div style="display: flex; gap: 10px;">
-            <button id="resetBtn" style="background-color: #6c757d; flex: 1;">🔄 重置</button>
-            <button id="processBtn" style="flex: 2;">✂️ 裁切圖片</button>
+            <button id="resetBtn" style="background-color: #6c757d; flex: 1; padding: 12px;">🔄 重置</button>
+            <button id="processBtn" style="flex: 2; padding: 12px;">✂️ 裁切圖片</button>
         </div>
     </div>
 
@@ -206,25 +304,30 @@
             <span id="resultSize" style="margin-left: 10px;"></span>
         </div>
         <img id="resultImage" alt="裁切結果">
-        <div style="display: flex; gap: 10px; margin-top: 15px;">
-            <button id="downloadJpgBtn" style="background-color: #28a745; flex: 1;">⬇️ 下載圖片 (JPG)</button>
-            <button id="downloadPdfBtn" style="background-color: #dc3545; flex: 1;">📄 下載 PDF (A4)</button>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px;">
+            <button id="downloadJpgBtn" style="flex: 1 1 calc(50% - 4px); padding: 10px; font-size: 0.9rem; background-color: #28a745; margin: 0;">⬇️ 下載 JPG</button>
+            <button id="downloadPdfBtn" style="flex: 1 1 calc(50% - 4px); padding: 10px; font-size: 0.9rem; background-color: #dc3545; margin: 0;">📄 下載 PDF</button>
+            <button id="addToPdfBtn" style="flex: 1 1 calc(50% - 4px); padding: 10px; font-size: 0.9rem; background-color: #17a2b8; margin: 0;">➕ 加入多頁</button>
+            <button id="shareBtn" style="flex: 1 1 calc(50% - 4px); padding: 10px; font-size: 0.9rem; background-color: #007bff; margin: 0; display: none;">📤 分享圖片</button>
+            <button id="reeditBtn" style="flex: 1 1 100%; padding: 10px; font-size: 0.9rem; background-color: #6c757d; margin: 0;">🔙 重新調整</button>
         </div>
-        <button id="reeditBtn" style="margin-top: 10px; background-color: #6c757d;">🔙 重新調整</button>
     </div>
     
     <!-- 懸浮控制面板 -->
     <div id="floatingControls">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <h2 style="margin: 0;">🎨 調整影像</h2>
-            <button id="closeFiltersBtn" style="width: auto; padding: 6px 12px; margin: 0; background-color: #6c757d; font-size: 0.9rem;">🔽 收起</button>
+            <div>
+                <button id="resetFiltersBtn" style="width: auto; padding: 6px 12px; margin: 0 5px 0 0; background-color: #6c757d; font-size: 0.9rem;">🔄 重置</button>
+                <button id="closeFiltersBtn" style="width: auto; padding: 6px 12px; margin: 0; background-color: #6c757d; font-size: 0.9rem;">🔽 收起</button>
+            </div>
         </div>
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-            <label style="flex: 1; cursor: pointer; text-align: center; background: #e9ecef; padding: 10px; border-radius: 8px; font-weight: bold;">
+        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+            <label style="flex: 1; cursor: pointer; text-align: center; background: #e9ecef; padding: 8px 4px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;">
                 <input type="checkbox" id="chkGrayscale"> 🌑 黑白化
             </label>
-            <label style="flex: 1; cursor: pointer; text-align: center; background: #e9ecef; padding: 10px; border-radius: 8px; font-weight: bold;">
-                <input type="checkbox" id="chkBinarize"> 🔲 二值化
+            <label style="flex: 1; cursor: pointer; text-align: center; background: #e9ecef; padding: 8px 4px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;" title="將圖片轉為純黑白，能有效移除陰影與背景紋理">
+                <input type="checkbox" id="chkBinarize"> 📄 文件強化
             </label>
         </div>
         <div class="slider-group">
@@ -240,15 +343,44 @@
             <input type="range" id="slider_s" min="0" max="300" value="100">
         </div>
         <div class="slider-group">
+            <label><span>降噪 (Denoise)</span> <span id="val_denoise">0.0</span></label>
+            <input type="range" id="slider_denoise" min="0" max="100" value="0">
+        </div>
+        <div class="slider-group">
             <label><span>銳化 (Sharpness) <small style="font-weight:normal; color:#666;">(裁切後生效)</small></span> <span id="val_sharp">1.0</span></label>
             <input type="range" id="slider_sharp" min="0" max="200" value="100">
+        </div>
+    </div>
+
+    <!-- 多頁預覽與管理視窗 -->
+    <div id="pdfPreviewModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; overflow-y: auto; padding: 20px; box-sizing: border-box;">
+        <div style="background: white; border-radius: 12px; padding: 15px; max-width: 600px; margin: 0 auto; position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
+                <h2 style="margin: 0;">📄 預覽多頁文件</h2>
+                <button id="btnClosePreview" style="width: auto; padding: 6px 12px; background-color: #6c757d; margin: 0;">✖ 關閉</button>
+            </div>
+            <!-- 預覽縮圖網格 -->
+            <div id="pdfPreviewGallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 15px;">
+            </div>
+            <!-- 空狀態提示 -->
+            <div id="pdfPreviewEmpty" style="display: none; text-align: center; color: #666; padding: 20px 0;">
+                目前沒有掃描任何文件喔！
+            </div>
         </div>
     </div>
 
     <!-- 供 OpenCV.js 進行背景運算的隱藏畫布 -->
     <canvas id="offscreenCanvas" style="display: none;"></canvas>
 
+    <!-- 版本號顯示 -->
+    <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: #adb5bd; z-index: 9999; pointer-events: none; font-family: monospace;">
+        v2.0.0
+    </div>
+
     <script>
+        // ==========================================
+        // 1. DOM 元素綁定與初始化
+        // ==========================================
         const cameraInput = document.getElementById('cameraInput');
         const galleryInput = document.getElementById('galleryInput');
         const canvas = document.getElementById('canvas');
@@ -257,12 +389,25 @@
         const resetBtn = document.getElementById('resetBtn');
         const loading = document.getElementById('loading');
         const downloadJpgBtn = document.getElementById('downloadJpgBtn');
+        const addToPdfBtn = document.getElementById('addToPdfBtn');
         const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+        const shareBtn = document.getElementById('shareBtn');
         const reeditBtn = document.getElementById('reeditBtn');
         const btnRotate = document.getElementById('btnRotate');
         const floatingControls = document.getElementById('floatingControls');
         const openFiltersBtn = document.getElementById('openFiltersBtn');
         const closeFiltersBtn = document.getElementById('closeFiltersBtn');
+        const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+        const pdfCart = document.getElementById('pdfCart');
+        const pdfPageCount = document.getElementById('pdfPageCount');
+        const btnClearPdfCart = document.getElementById('btnClearPdfCart');
+        const btnGenerateMultiPdf = document.getElementById('btnGenerateMultiPdf');
+        const btnPreviewPdfCart = document.getElementById('btnPreviewPdfCart');
+        const pdfPreviewModal = document.getElementById('pdfPreviewModal');
+        const btnClosePreview = document.getElementById('btnClosePreview');
+        const pdfPreviewGallery = document.getElementById('pdfPreviewGallery');
+        const pdfPreviewEmpty = document.getElementById('pdfPreviewEmpty');
+        const btnRetake = document.getElementById('btnRetake');
         
         // 吸附力道 UI 控制
         const autoSnapCheckbox = document.getElementById('autoSnap');
@@ -285,7 +430,23 @@
         });
         updateSnapUI(); // 初始化
 
+        // ==========================================
+        // 2. 全域狀態變數 (Global State)
+        // ==========================================
         let currentFile = null;
+        let pdfPages = []; // 儲存多頁文件的 Base64 陣列
+        let draggedPdfIndex = null; // 紀錄目前正在拖曳的 PDF 頁面索引
+        
+        // 控制多頁購物車面板的顯示狀態 (編輯模式時隱藏以免擋住畫面)
+        function updatePdfCartVisibility() {
+            const isEditorActive = document.getElementById('editorCard').style.display === 'block';
+            pdfCart.style.display = (pdfPages.length > 0 && !isEditorActive) ? 'block' : 'none';
+        }
+        
+        // 檢查瀏覽器是否支援 Web Share API，若支援則顯示分享按鈕
+        if (navigator.share) {
+            shareBtn.style.display = 'block';
+        }
         let imageObj = new Image();
         let points = []; // [{x, y}, {x, y}, {x, y}, {x, y}]
         let draggingIdx = -1;
@@ -295,20 +456,25 @@
         let selectedEdgeIdx = -1; // 紀錄目前被選中的「邊」
         let lastEdgeDragPoint = null; // 紀錄邊緣拖曳的上一幀座標
 
-        // 更新濾鏡提示顯示狀態
+        /**
+         * 更新濾鏡狀態提示 (若有調整且面板收起時，顯示「已套用濾鏡」)
+         */
         function updateFilterHint() {
             const b = document.getElementById('slider_b').value;
             const c = document.getElementById('slider_c').value;
             const s = document.getElementById('slider_s').value;
             const sharp = document.getElementById('slider_sharp').value;
+            const denoise = document.getElementById('slider_denoise').value;
             const isGrayscale = document.getElementById('chkGrayscale').checked;
             const isBinarize = document.getElementById('chkBinarize').checked;
-            const isModified = (b !== '100' || c !== '100' || s !== '100' || sharp !== '100' || isGrayscale || isBinarize);
+            const isModified = (b !== '100' || c !== '100' || s !== '100' || sharp !== '100' || denoise !== '0' || isGrayscale || isBinarize);
             const isPanelHidden = !floatingControls.classList.contains('visible');
             document.getElementById('filterActiveHint').style.display = (isModified && isPanelHidden) ? 'block' : 'none';
         }
 
-        // 新增手勢與變換狀態
+        // ==========================================
+        // 3. 畫布變換與 AI 引擎狀態
+        // ==========================================
         let transform = { scale: 1, x: 0, y: 0 };
         let activePointers = new Map();
         let initialPinchDistance = null;
@@ -332,6 +498,8 @@
         async function loadYoloModel() {
             try {
                 // 嘗試載入 YOLO TFJS 模型
+                await tf.setBackend('webgl'); // 強制啟用 WebGL 顯示卡硬體加速
+                await tf.ready();
                 yoloModel = await tf.loadGraphModel('./model_web/model.json');
                 console.log("✅ YOLO TF.js 模型載入成功！");
             } catch (e) {
@@ -348,7 +516,7 @@
         }
 
         // 更新滑桿數字顯示
-        ['b', 'c', 's', 'sharp'].forEach(id => {
+        ['b', 'c', 's', 'sharp', 'denoise'].forEach(id => {
             const slider = document.getElementById(`slider_${id}`);
             const valSpan = document.getElementById(`val_${id}`);
             slider.addEventListener('input', (e) => {
@@ -370,19 +538,27 @@
             updateFilterHint();
         });
 
-        // 處理一鍵重置濾鏡邏輯
-        resetBtn.addEventListener('click', () => {
-            const defaults = { 'b': { val: 100, text: '100' }, 'c': { val: 100, text: '1.0' }, 's': { val: 100, text: '1.0' }, 'sharp': { val: 100, text: '1.0' } };
+        // 將濾鏡重置邏輯獨立出來
+        const resetFilters = () => {
+            const defaults = { 'b': { val: 100, text: '100' }, 'c': { val: 100, text: '1.0' }, 's': { val: 100, text: '1.0' }, 'sharp': { val: 100, text: '1.0' }, 'denoise': { val: 0, text: '0.0' } };
             for (const id in defaults) {
                 document.getElementById(`slider_${id}`).value = defaults[id].val;
                 document.getElementById(`val_${id}`).textContent = defaults[id].text;
             }
             document.getElementById('chkGrayscale').checked = false;
             document.getElementById('chkBinarize').checked = false;
-            resetTransform(); // 同時重置畫布的縮放與平移
             drawCanvas(); // 重繪畫布以取消濾鏡效果
             updateFilterHint();
+        };
+
+        // 主畫面重置按鈕：重置濾鏡與畫布縮放狀態
+        resetBtn.addEventListener('click', () => {
+            resetFilters();
+            resetTransform(); // 同時重置畫布的縮放與平移
         });
+        
+        // 懸浮面板重置按鈕：僅重置濾鏡
+        resetFiltersBtn.addEventListener('click', resetFilters);
 
         // 處理濾鏡面板的展開與收起
         openFiltersBtn.addEventListener('click', () => {
@@ -400,8 +576,10 @@
         imageObj.onload = async () => {
             canvas.width = imageObj.width;
             canvas.height = imageObj.height;
+            document.getElementById('uploadCard').style.display = 'none'; // 隱藏首頁區塊，節省空間
             document.getElementById('editorCard').style.display = 'block';
             document.getElementById('resultCard').style.display = 'none';
+            updatePdfCartVisibility();
             
             resetTransform(); // 載入新圖片時重置縮放狀態
             
@@ -462,6 +640,47 @@
         cameraInput.addEventListener('change', handleFileSelect);
         galleryInput.addEventListener('change', handleFileSelect);
 
+        // 手機版專用：透過按鈕主動讀取剪貼簿 API
+        const btnPaste = document.getElementById('btnPaste');
+        if (btnPaste) {
+            btnPaste.addEventListener('click', async () => {
+                try {
+                    const clipboardItems = await navigator.clipboard.read();
+                    let foundImage = false;
+                    for (const clipboardItem of clipboardItems) {
+                        for (const type of clipboardItem.types) {
+                            if (type.startsWith('image/')) {
+                                const blob = await clipboardItem.getType(type);
+                                const file = new File([blob], "pasted_image.jpg", { type: type });
+                                handleFileSelect({ target: { files: [file], value: '' } });
+                                foundImage = true;
+                                break;
+                            }
+                        }
+                        if (foundImage) break;
+                    }
+                    if (!foundImage) {
+                        alert('剪貼簿中沒有找到圖片喔！請先複製一張圖片再試一次。');
+                    }
+                } catch (err) {
+                    console.error('讀取剪貼簿失敗:', err);
+                    alert('無法讀取剪貼簿。請確保網頁處於 HTTPS 安全連線，並允許剪貼簿讀取權限。');
+                }
+            });
+        }
+
+        // 支援從剪貼簿貼上照片
+        window.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || window.clipboardData).items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+                    const file = items[i].getAsFile();
+                    handleFileSelect({ target: { files: [file], value: '' } }); // 模擬 input change 事件
+                    break; // 找到第一張圖片就停止並處理
+                }
+            }
+        });
+
         // 處理圖片旋轉 90 度
         btnRotate.addEventListener('click', () => {
             if (!currentFile) return;
@@ -490,7 +709,10 @@
             imageObj.src = dataUrl; // 觸發 onload，自動重設畫布與呼叫 YOLO
         });
 
-        // 呼叫 TensorFlow.js 在本機端進行 YOLO 預測
+        /**
+         * 執行 TensorFlow.js (YOLO) 模型進行證件邊界預測
+         * @returns {Promise<boolean>} 是否成功偵測到證件
+         */
         async function runYoloInference() {
             if (!yoloModel) return false;
             try {
@@ -510,7 +732,7 @@
                 let bestConf = 0;
                 let bestBox = null;
                 
-                // YOLOv8 輸出格式：[cx, cy, w, h, class0_prob, mask_weights...]
+                // 解析 YOLOv8 輸出陣列，格式為：[cx, cy, w, h, class0_prob, mask_weights...]
                 for (let i = 0; i < dataArray.length; i++) {
                     const row = dataArray[i];
                     const conf = row[4]; // 取得第一個類別(證件)的信心度
@@ -622,9 +844,11 @@
             
             const isGrayscale = document.getElementById('chkGrayscale').checked;
             const isBinarize = document.getElementById('chkBinarize').checked;
+            const denoise = document.getElementById('slider_denoise').value;
             
             if (isGrayscale || isBinarize) s = 0; // 若選擇黑白/二值化，強制將預覽飽和度歸零
             let extraFilter = isBinarize ? ' contrast(500%)' : ''; // 透過極高對比度來模擬二值化的視覺預覽效果
+            if (denoise > 0) extraFilter += ` blur(${denoise / 100}px)`; // 透過動態輕微模糊來模擬降噪的視覺預覽效果
             
             ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)${extraFilter}`;
             ctx.drawImage(imageObj, 0, 0);
@@ -848,13 +1072,17 @@
             } catch (e) { console.error("自動吸附失敗", e); }
         }
 
-        // 重構後的觸控事件：支援兩指縮放、單指平移與拖拉點
+        // ==========================================
+        // 4. 觸控與滑鼠手勢處理 (多點觸控支援)
+        // ==========================================
+        
+        // 處理按下事件 (Touch Start / Mouse Down)
         canvas.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
             if (activePointers.size === 2) {
-                // 開始兩指縮放
+                // --- 雙指模式：開始縮放 (Pinch to Zoom) ---
                 draggingIdx = -1;
                 draggingEdgeIdx = -1;
                 isDragging = false;
@@ -868,18 +1096,20 @@
             }
 
             if (activePointers.size === 1) {
+                // --- 單指模式：點擊角點、邊緣或準備平移 ---
                 const pos = getPointerPos(e);
                 // 調整觸控判定半徑，確保放大後觸控範圍不會縮水
                 const hitRadius = (canvas.width * 0.08) / transform.scale; 
                 
                 draggingIdx = points.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
                 if (draggingIdx !== -1) {
+                    // 點擊到「角點」
                     selectedIdx = draggingIdx;
                     selectedEdgeIdx = -1;
                     isDragging = false;
                     lastPanPoint = null;
                 } else {
-                    // 檢查是否點擊邊緣中點
+                    // 檢查是否點擊到「邊緣中點」
                     const midpoints = points.map((p, i) => ({ x: (p.x + points[(i + 1) % 4].x) / 2, y: (p.y + points[(i + 1) % 4].y) / 2 }));
                     draggingEdgeIdx = midpoints.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
                     
@@ -899,13 +1129,14 @@
             }
         });
 
+        // 處理移動事件 (Touch Move / Mouse Move)
         canvas.addEventListener('pointermove', (e) => {
             e.preventDefault();
             if (!activePointers.has(e.pointerId)) return;
             activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
             if (activePointers.size === 2 && initialPinchDistance) {
-                // 執行兩指縮放與平移
+                // --- 雙指模式：執行縮放與平移計算 ---
                 const pts = Array.from(activePointers.values());
                 const currentDistance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
                 const currentCenter = { x: (pts[0].x + pts[1].x)/2, y: (pts[0].y + pts[1].y)/2 };
@@ -924,6 +1155,7 @@
             }
 
             if (activePointers.size === 1) {
+                // --- 單指模式：拖曳角點、邊緣或平移畫布 ---
                 if (draggingIdx !== -1) {
                     points[draggingIdx] = getPointerPos(e);
                     isDragging = true;
@@ -940,7 +1172,6 @@
                     isDragging = true;
                     drawCanvas();
                 } else if (lastPanPoint) {
-                    // 單指平移畫布
                     const dx = e.clientX - lastPanPoint.x;
                     const dy = e.clientY - lastPanPoint.y;
                     transform.x += dx;
@@ -951,6 +1182,7 @@
             }
         });
 
+        // 處理放開/取消事件 (Touch End / Mouse Up)
         const pointerUpHandler = (e) => {
             e.preventDefault();
             activePointers.delete(e.pointerId);
@@ -1009,20 +1241,25 @@
         document.getElementById('btnLeft').addEventListener('click', () => nudgePoint(-1, 0));
         document.getElementById('btnRight').addEventListener('click', () => nudgePoint(1, 0));
 
-        // 呼叫 OpenCV.js 在本機端處理圖片
+        // ==========================================
+        // 5. 核心影像處理管線 (OpenCV.js)
+        // ==========================================
         processBtn.addEventListener('click', async () => {
             if (!cvReady) return;
             loading.style.display = 'block'; processBtn.disabled = true;
             
-            // 給予 UI 渲染 Loading 字樣的時間
+            // 稍微延遲以確保瀏覽器有空檔渲染 Loading UI
             await new Promise(resolve => setTimeout(resolve, 50));
             
             try {
                 let src = cv.imread(imageObj);
                 
-                // 排序 4 個點 (tl, tr, br, bl)
+                // --------------------------------------------------
+                // 步驟 1：排序 4 個點 (順序為 左上 tl, 右上 tr, 右下 br, 左下 bl)
+                // --------------------------------------------------
                 let sums = points.map(p => p.x + p.y);
                 let diffs = points.map(p => p.x - p.y);
+                
                 let tl = points[sums.indexOf(Math.min(...sums))];
                 let br = points[sums.indexOf(Math.max(...sums))];
                 let tr = points[diffs.indexOf(Math.max(...diffs))];
@@ -1030,6 +1267,7 @@
                 
                 let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
                 
+                // 計算兩側寬度與高度，取最大值作為校正後的基準解析度
                 let wA = Math.hypot(br.x - bl.x, br.y - bl.y);
                 let wB = Math.hypot(tr.x - tl.x, tr.y - tl.y);
                 let maxWidth = Math.max(wA, wB);
@@ -1056,18 +1294,35 @@
                     finalH = Math.round(finalH * scale);
                 }
                 
+                // --------------------------------------------------
+                // 步驟 2：執行透視變換 (Perspective Transform)
+                // --------------------------------------------------
                 let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, finalW - 1, 0, finalW - 1, finalH - 1, 0, finalH - 1]);
                 let M = cv.getPerspectiveTransform(srcTri, dstTri);
                 
                 let warped = new cv.Mat();
                 cv.warpPerspective(src, warped, M, new cv.Size(finalW, finalH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
                 
-                // 處理濾鏡
+                // --------------------------------------------------
+                // 步驟 3：影像降噪 (Median Blur)
+                // --------------------------------------------------
+                let denoiseVal = parseFloat(document.getElementById('slider_denoise').value) / 100.0;
+                if (denoiseVal > 0) {
+                    let ksize = 3 + 2 * Math.floor(denoiseVal * 3); // 將 0.0~1.0 巧妙映射至 3, 5, 7, 9 的奇數 Kernel 參數
+                    cv.cvtColor(warped, warped, cv.COLOR_RGBA2RGB, 0); // 中值濾波更適合在 RGB 空間運作
+                    cv.medianBlur(warped, warped, ksize); // 使用動態強度平滑去除相機雜訊顆粒
+                    cv.cvtColor(warped, warped, cv.COLOR_RGB2RGBA, 0);
+                }
+                
+                // 取得各項濾鏡參數
                 let b = parseFloat(document.getElementById('slider_b').value) - 100;
                 let c = parseFloat(document.getElementById('slider_c').value) / 100.0;
                 let s = parseFloat(document.getElementById('slider_s').value) / 100.0;
                 let sharp = parseFloat(document.getElementById('slider_sharp').value) / 100.0;
                 
+                // --------------------------------------------------
+                // 步驟 4：銳化處理 (Unsharp Masking 概念)
+                // --------------------------------------------------
                 let base_enhanced = warped.clone();
                 if (sharp > 0) {
                     let max_sharpened = new cv.Mat();
@@ -1077,6 +1332,9 @@
                     max_sharpened.delete(); kernel.delete();
                 }
                 
+                // --------------------------------------------------
+                // 步驟 5：飽顛度調整 (HSV 色彩空間轉換)
+                // --------------------------------------------------
                 let temp_img = base_enhanced.clone();
                 if (s !== 1.0) {
                     let hsv = new cv.Mat();
@@ -1093,24 +1351,31 @@
                     hsv.delete(); channels.delete(); sat.delete();
                 }
                 
+                // --------------------------------------------------
+                // 步驟 6：亮度與對比度調整 (Linear Transform)
+                // --------------------------------------------------
                 let final_result = new cv.Mat();
                 temp_img.convertTo(final_result, -1, c, b);
                 
-                // 處理黑白化與二值化 (OpenCV 實際運算)
+                // --------------------------------------------------
+                // 步驟 7：黑白化與自適應二值化 (Adaptive Thresholding)
+                // --------------------------------------------------
                 const isGrayscale = document.getElementById('chkGrayscale').checked;
                 const isBinarize = document.getElementById('chkBinarize').checked;
                 if (isGrayscale || isBinarize) {
                     let grayMat = new cv.Mat();
                     cv.cvtColor(final_result, grayMat, cv.COLOR_RGBA2GRAY, 0);
                     if (isBinarize) {
-                        // 採用固定閾值 127。由於使用者會先拉動亮度和對比度，這等同於讓使用者自己控制二值化的靈敏度！
-                        cv.threshold(grayMat, grayMat, 127, 255, cv.THRESH_BINARY);
+                        // 升級為「自適應二值化」，能完美處理陰影與光線不均的問題
+                        cv.adaptiveThreshold(grayMat, grayMat, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 15, 4);
                     }
                     cv.cvtColor(grayMat, final_result, cv.COLOR_GRAY2RGBA, 0);
                     grayMat.delete();
                 }
                 
-                // 將 OpenCV 圖片畫到隱藏畫布並轉換為 Base64
+                // --------------------------------------------------
+                // 步驟 8：輸出結果至畫布與清理記憶體
+                // --------------------------------------------------
                 cv.imshow('offscreenCanvas', final_result);
                 document.getElementById('resultImage').src = document.getElementById('offscreenCanvas').toDataURL('image/jpeg', 0.95);
                 document.getElementById('resultSize').textContent = ''; // 清空舊的檔案大小
@@ -1124,6 +1389,7 @@
                 floatingControls.classList.remove('visible');
                 document.body.classList.remove('controls-visible');
                 document.getElementById('resultCard').style.display = 'block';
+                updatePdfCartVisibility();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 
             } catch(err) {
@@ -1133,7 +1399,11 @@
             }
         });
 
-        // 格式化檔案大小
+        // ==========================================
+        // 6. 檔案匯出與多頁 PDF 管理
+        // ==========================================
+        
+        /** 將 Bytes 轉為人類可讀的 KB, MB 格式 */
         function formatBytes(bytes, decimals = 2) {
             if (bytes === 0) return '0 Bytes';
             const k = 1024;
@@ -1164,7 +1434,210 @@
                 });
         });
 
-        // 處理下載 PDF 邏輯
+        // 處理分享圖片邏輯 (Web Share API)
+        shareBtn.addEventListener('click', async () => {
+            const dataUrl = document.getElementById('resultImage').src;
+            if (!dataUrl || !dataUrl.startsWith('data:image')) return;
+            
+            try {
+                // 將 Base64 轉換回 File 物件以供分享
+                const res = await fetch(dataUrl);
+                const blob = await res.blob();
+                const file = new File([blob], 'id_card_scan.jpg', { type: 'image/jpeg' });
+                
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        title: '證件掃描',
+                        files: [file]
+                    });
+                } else {
+                    alert('您的裝置或瀏覽器不支援直接分享圖片檔案，請先使用下載按鈕。');
+                }
+            } catch (err) { console.error('分享失敗或已取消:', err); }
+        });
+
+        // 處理加入多頁文件邏輯
+        addToPdfBtn.addEventListener('click', () => {
+            const dataUrl = document.getElementById('resultImage').src;
+            if (!dataUrl || !dataUrl.startsWith('data:image')) return;
+            
+            pdfPages.push(dataUrl);
+            pdfPageCount.textContent = pdfPages.length;
+            
+            // 退回首頁準備掃描下一張
+            document.getElementById('resultCard').style.display = 'none';
+            document.getElementById('uploadCard').style.display = 'block';
+            updatePdfCartVisibility();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        // 處理清空多頁文件邏輯
+        btnClearPdfCart.addEventListener('click', () => {
+            if (confirm(`確定要清空已掃描的 ${pdfPages.length} 頁文件嗎？`)) {
+                pdfPages = [];
+                pdfPageCount.textContent = '0';
+                updatePdfCartVisibility();
+            }
+        });
+
+        // 處理匯出多頁 PDF 邏輯
+        btnGenerateMultiPdf.addEventListener('click', async () => {
+            if (pdfPages.length === 0) return;
+            
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            const A4_WIDTH = 210, A4_HEIGHT = 297, MARGIN = 10;
+            
+            btnGenerateMultiPdf.disabled = true;
+            btnGenerateMultiPdf.textContent = '⏳ 處理中...';
+
+            // 依序將陣列中的圖片畫入 PDF 中
+            for (let i = 0; i < pdfPages.length; i++) {
+                await new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        if (i > 0) pdf.addPage(); // 第一頁不需要 addPage
+                        const imgRatio = img.width / img.height;
+                        let imgWidth = A4_WIDTH - MARGIN * 2;
+                        let imgHeight = imgWidth / imgRatio;
+                        
+                        // 若圖片過長，限制其高度並等比縮小寬度，然後置中
+                        if (imgHeight > A4_HEIGHT - MARGIN * 2) {
+                            imgHeight = A4_HEIGHT - MARGIN * 2;
+                            imgWidth = imgHeight * imgRatio;
+                        }
+                        const x = (A4_WIDTH - imgWidth) / 2;
+                        pdf.addImage(img, 'JPEG', x, MARGIN, imgWidth, imgHeight);
+                        resolve();
+                    };
+                    img.src = pdfPages[i];
+                });
+            }
+            
+            pdf.save('multi_page_scan.pdf');
+            btnGenerateMultiPdf.disabled = false;
+            btnGenerateMultiPdf.textContent = '📥 匯出 PDF';
+        });
+
+        // 處理多頁文件預覽與刪除邏輯
+        function renderPdfPreview() {
+            pdfPreviewGallery.innerHTML = '';
+            if (pdfPages.length === 0) {
+                pdfPreviewEmpty.style.display = 'block';
+            } else {
+                pdfPreviewEmpty.style.display = 'none';
+                pdfPages.forEach((dataUrl, index) => {
+                    const item = document.createElement('div');
+                    item.style.position = 'relative';
+                    item.style.border = '2px solid #ccc'; // 加粗邊框，避免切換虛線時跳動
+                    item.style.borderRadius = '8px';
+                    item.style.overflow = 'hidden';
+                    item.style.backgroundColor = '#fff';
+                    item.style.cursor = 'grab'; // 提示這是一個可抓取的物件
+                    item.draggable = true; // 啟用 HTML5 原生拖曳功能
+                    
+                    const img = document.createElement('img');
+                    img.src = dataUrl;
+                    img.style.width = '100%';
+                    img.style.display = 'block';
+                    
+                    const pageNum = document.createElement('div');
+                    pageNum.textContent = `第 ${index + 1} 頁`;
+                    pageNum.style.textAlign = 'center';
+                    pageNum.style.padding = '5px 0';
+                    pageNum.style.backgroundColor = '#f4f6f8';
+                    pageNum.style.fontSize = '0.85rem';
+                    pageNum.style.fontWeight = 'bold';
+                    pageNum.style.color = '#333';
+                    
+                    const delBtn = document.createElement('button');
+                    delBtn.innerHTML = '🗑️';
+                    delBtn.style.position = 'absolute';
+                    delBtn.style.top = '5px';
+                    delBtn.style.right = '5px';
+                    delBtn.style.width = '32px';
+                    delBtn.style.height = '32px';
+                    delBtn.style.padding = '0';
+                    delBtn.style.backgroundColor = 'rgba(220, 53, 69, 0.9)';
+                    delBtn.style.border = 'none';
+                    delBtn.style.borderRadius = '50%';
+                    delBtn.style.color = 'white';
+                    delBtn.style.cursor = 'pointer';
+                    delBtn.style.display = 'flex';
+                    delBtn.style.alignItems = 'center';
+                    delBtn.style.justifyContent = 'center';
+                    delBtn.style.fontSize = '0.9rem';
+                    
+                    delBtn.addEventListener('click', () => {
+                        if (confirm(`確定要刪除第 ${index + 1} 頁嗎？`)) {
+                            pdfPages.splice(index, 1);
+                            pdfPageCount.textContent = pdfPages.length;
+                            updatePdfCartVisibility();
+                            renderPdfPreview(); // 刪除後立即重新渲染排版
+                            
+                            // 如果刪到沒剩半頁，自動關閉預覽視窗
+                            if (pdfPages.length === 0) {
+                                setTimeout(() => {
+                                    pdfPreviewModal.style.display = 'none';
+                                    document.body.style.overflow = '';
+                                }, 800); // 稍微延遲讓使用者看見空狀態提示
+                            }
+                        }
+                    });
+                    
+                    // --- 拖曳排序事件監聽 ---
+                    item.addEventListener('dragstart', (e) => {
+                        draggedPdfIndex = index;
+                        e.dataTransfer.effectAllowed = 'move';
+                        // 使用 setTimeout 讓半透明效果只套用在原地，不影響跟著游標移動的殘影
+                        setTimeout(() => item.style.opacity = '0.4', 0);
+                    });
+                    
+                    item.addEventListener('dragover', (e) => {
+                        e.preventDefault(); // 必須阻止預設行為才能觸發 drop
+                        item.style.borderColor = '#007bff';
+                        item.style.borderStyle = 'dashed';
+                    });
+                    
+                    item.addEventListener('dragleave', () => {
+                        item.style.borderColor = '#ccc';
+                        item.style.borderStyle = 'solid';
+                    });
+                    
+                    item.addEventListener('drop', (e) => {
+                        e.preventDefault();
+                        if (draggedPdfIndex !== null && draggedPdfIndex !== index) {
+                            // 從陣列中抽出被拖曳的項目，並插入到新的索引位置
+                            const draggedPage = pdfPages.splice(draggedPdfIndex, 1)[0];
+                            pdfPages.splice(index, 0, draggedPage);
+                        }
+                    });
+                    
+                    item.addEventListener('dragend', () => {
+                        draggedPdfIndex = null;
+                        renderPdfPreview(); // 拖曳結束後，無論有沒有改變順序，都重新渲染以重置樣式
+                    });
+                    
+                    item.appendChild(img);
+                    item.appendChild(pageNum);
+                    item.appendChild(delBtn);
+                    pdfPreviewGallery.appendChild(item);
+                });
+            }
+        }
+
+        btnPreviewPdfCart.addEventListener('click', () => {
+            renderPdfPreview();
+            pdfPreviewModal.style.display = 'block';
+            document.body.style.overflow = 'hidden'; // 防止預覽時背景網頁跟著滾動
+        });
+
+        btnClosePreview.addEventListener('click', () => {
+            pdfPreviewModal.style.display = 'none';
+            document.body.style.overflow = ''; // 恢復背景網頁滾動
+        });
+
+        // 處理單張下載 PDF 邏輯
         downloadPdfBtn.addEventListener('click', () => {
             const { jsPDF } = window.jspdf;
             const imgData = document.getElementById('resultImage').src;
@@ -1185,7 +1658,14 @@
                 const imgRatio = img.width / img.height;
                 let imgWidth = A4_WIDTH - MARGIN * 2;
                 let imgHeight = imgWidth / imgRatio;
-                pdf.addImage(img, 'JPEG', MARGIN, MARGIN, imgWidth, imgHeight);
+                
+                // 若圖片過長，限制其高度並等比縮小寬度，然後置中
+                if (imgHeight > A4_HEIGHT - MARGIN * 2) {
+                    imgHeight = A4_HEIGHT - MARGIN * 2;
+                    imgWidth = imgHeight * imgRatio;
+                }
+                const x = (A4_WIDTH - imgWidth) / 2;
+                pdf.addImage(img, 'JPEG', x, MARGIN, imgWidth, imgHeight);
                 pdf.save('id_card_scan.pdf');
             };
             img.src = imgData;
@@ -1195,7 +1675,16 @@
         reeditBtn.addEventListener('click', () => {
             document.getElementById('resultCard').style.display = 'none';
             document.getElementById('editorCard').style.display = 'block';
+            updatePdfCartVisibility();
             window.scrollTo({ top: 0, behavior: 'smooth' }); // 平滑捲動回編輯區
+        });
+
+        // 處理重拍/退回首頁邏輯
+        btnRetake.addEventListener('click', () => {
+            document.getElementById('editorCard').style.display = 'none';
+            document.getElementById('uploadCard').style.display = 'block';
+            updatePdfCartVisibility();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         });
 
         // 註冊 Service Worker，啟用 PWA 離線快取能力
