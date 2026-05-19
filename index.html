@@ -11,16 +11,51 @@
     <link rel="apple-touch-icon" href="./icon.svg">
     
     <style>
+        /* 定義深色與淺色模式的 CSS 變數 */
+        :root {
+            --bg-color: #f4f6f8;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-muted: #666666;
+            --border-color: #cccccc;
+            --border-light: #e9ecef;
+            --border-dark: #adb5bd;
+            --panel-bg: rgba(255, 255, 255, 0.85);
+            --input-bg: #ffffff;
+            --btn-sec-bg: #ffffff;
+            --btn-sec-active: #f8f9fa;
+            --highlight-bg: #e3f2fd;
+            --hint-bg: #f8f9fa;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #121212;
+                --card-bg: #1e1e1e;
+                --text-main: #e0e0e0;
+                --text-muted: #aaaaaa;
+                --border-color: #555555;
+                --border-light: #333333;
+                --border-dark: #666666;
+                --panel-bg: rgba(30, 30, 30, 0.85);
+                --input-bg: #2c2c2c;
+                --btn-sec-bg: #2c2c2c;
+                --btn-sec-active: #3c3c3c;
+                --highlight-bg: #0d2a46;
+                --hint-bg: #2a2a2a;
+            }
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f4f6f8;
+            background-color: var(--bg-color);
             margin: 0;
             padding: 10px;
-            color: #333;
+            color: var(--text-main);
             -webkit-tap-highlight-color: transparent; /* 移除手機點擊時醜醜的預設灰色反白，改用自訂的按鈕動畫 */
         }
         .card {
-            background: white;
+            background: var(--card-bg);
             border-radius: 12px;
             padding: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
@@ -38,7 +73,7 @@
             align-items: center;
             overflow: hidden; /* 確保放大的圖片不會超出範圍 */
             margin-bottom: 10px;
-            border: 1px solid #ccc;
+            border: 1px solid var(--border-color);
             border-radius: 8px;
             background-color: #222; /* 縮放時露出的底色 */
         }
@@ -62,7 +97,7 @@
             width: 35px;
             font-size: 0.85rem;
             font-weight: bold;
-            color: #495057;
+            color: var(--text-main);
             margin: 0;
             text-align: right;
             white-space: nowrap;
@@ -102,11 +137,11 @@
             filter: brightness(0.95);
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        button:disabled { background-color: #ccc; cursor: not-allowed; opacity: 0.7; }
+        button:disabled { background-color: var(--border-color); color: var(--text-muted); cursor: not-allowed; opacity: 0.7; }
         
         /* 結果顯示區 */
-        #resultImage { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd; }
-        .data-box { background: #e9ecef; padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 1rem; }
+        #resultImage { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid var(--border-light); }
+        .data-box { background: var(--border-light); padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 1rem; }
         
         #loading { display: none; text-align: center; color: #007bff; font-weight: bold; margin-bottom: 10px; }
         /* 拍照與上傳按鈕 (新版精美 UI) */
@@ -125,15 +160,15 @@
         }
         .btn-primary-cam:active { transform: scale(0.96); filter: brightness(0.95); animation: none; }
         .btn-secondary {
-            flex: 1; padding: 14px 4px; background: white; color: #495057;
-            border: 2px solid #e9ecef; border-radius: 12px; font-weight: bold; font-size: 0.95rem;
+            flex: 1; padding: 14px 4px; background: var(--btn-sec-bg); color: var(--text-main);
+            border: 2px solid var(--border-light); border-radius: 12px; font-weight: bold; font-size: 0.95rem;
             cursor: pointer; transition: transform 0.1s, background-color 0.2s, border-color 0.2s;
         }
-        .btn-secondary:active { transform: scale(0.96); background: #f8f9fa; border-color: #ced4da; }
+        .btn-secondary:active { transform: scale(0.96); background: var(--btn-sec-active); border-color: var(--border-dark); }
         
         /* 方向鍵微調 */
         .btn-nudge { background-color: #6c757d; padding: 8px 0; font-size: 1.1rem; width: 100%; border-radius: 6px; border: none; color: white; cursor: pointer; }
-        .hint-text { text-align: center; font-size: 0.75rem; color: #666; margin-bottom: 8px; }
+        .hint-text { text-align: center; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px; }
 
         /* 下拉選單點擊與聚焦效果 */
         select {
@@ -151,12 +186,12 @@
             bottom: 0;
             left: 0;
             right: 0;
-            background: rgba(255, 255, 255, 0.85);
+            background: var(--panel-bg);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             padding: 15px;
             padding-bottom: calc(15px + env(safe-area-inset-bottom)); /* iPhone 安全區域 */
-            border-top: 1px solid #e0e0e0;
+            border-top: 1px solid var(--border-color);
             box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
             z-index: 1000;
             transform: translateY(100%);
@@ -174,8 +209,8 @@
             position: relative;
             width: 48px;
             height: 64px;
-            background: white;
-            border: 2px solid #adb5bd;
+            background: var(--card-bg);
+            border: 2px solid var(--border-dark);
             border-radius: 6px;
             margin: 0 auto 12px auto;
             overflow: hidden;
@@ -197,6 +232,26 @@
             90% { opacity: 1; }
             100% { top: 68px; opacity: 0; }
         }
+
+        /* 橫向滑動工具列 (解決換行跑版問題) */
+        .action-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 12px;
+            overflow-x: auto;
+            white-space: nowrap;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE/Edge */
+            padding-top: 18px; /* 預留上方提示文字空間 */
+            margin-top: -18px; /* 抵銷 padding 帶來的位移 */
+            padding-bottom: 4px; /* 防止陰影被裁切 */
+            -webkit-overflow-scrolling: touch; /* 讓 iOS 具備原生慣性滑動效果 */
+        }
+        .action-toolbar::-webkit-scrollbar {
+            display: none; /* Chrome/Safari/Opera */
+        }
     </style>
 </head>
 <body ontouchstart=""> <!-- 加上 ontouchstart 讓 iOS Safari 能完美觸發 button:active 點擊特效 -->
@@ -206,8 +261,8 @@
     </div>
 
     <!-- 多頁文件購物車提示 -->
-    <div class="card" id="pdfCart" style="display: none; background-color: #e3f2fd; border: 2px dashed #007bff; margin-top: 10px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div class="card" id="pdfCart" style="display: none; background-color: var(--highlight-bg); border: 2px dashed #007bff; margin-top: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <h3 style="margin: 0; font-size: 1rem; color: #007bff;">📄 多頁文件：<span id="pdfPageCount">0</span> 頁</h3>
             <div style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end;">
                 <button id="btnPreviewPdfCart" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #17a2b8; margin: 0;">👀 預覽</button>
@@ -234,32 +289,31 @@
         <input type="file" id="galleryInput" accept="image/*" style="display: none;">
 
         <!-- 教學動畫與步驟指引 -->
-        <div style="margin-top: 25px; padding: 20px 10px; background: #f8f9fa; border-radius: 12px; text-align: center; border: 1px dashed #d6d8db;">
+        <div style="margin-top: 25px; padding: 20px 10px; background: var(--hint-bg); border-radius: 12px; text-align: center; border: 1px dashed var(--border-dark);">
             <!-- 純 CSS 繪製的文件與掃描光條 -->
             <div class="scanner-demo">
-                <div style="position: absolute; top: 12px; left: 8px; right: 8px; height: 5px; background: #e9ecef; border-radius: 3px;"></div>
-                <div style="position: absolute; top: 26px; left: 8px; right: 16px; height: 5px; background: #e9ecef; border-radius: 3px;"></div>
-                <div style="position: absolute; top: 40px; left: 8px; right: 12px; height: 5px; background: #e9ecef; border-radius: 3px;"></div>
+                <div style="position: absolute; top: 12px; left: 8px; right: 8px; height: 5px; background: var(--border-light); border-radius: 3px;"></div>
+                <div style="position: absolute; top: 26px; left: 8px; right: 16px; height: 5px; background: var(--border-light); border-radius: 3px;"></div>
+                <div style="position: absolute; top: 40px; left: 8px; right: 12px; height: 5px; background: var(--border-light); border-radius: 3px;"></div>
                 <div class="scanner-line"></div>
             </div>
-            <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: #495057;">💡 快速掃描 3 步驟</h3>
-            <div style="display: flex; justify-content: space-around; align-items: center; font-size: 0.8rem; color: #6c757d; font-weight: bold; padding: 0 5px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: var(--text-main);">💡 快速掃描 3 步驟</h3>
+            <div style="display: flex; justify-content: space-around; align-items: center; font-size: 0.8rem; color: var(--text-muted); font-weight: bold; padding: 0 5px;">
                 <span>📸 1. 拍下文件</span>
-                <span style="color: #ced4da;">➔</span>
+                <span style="color: var(--border-dark);">➔</span>
                 <span>🎯 2. AI 對齊</span>
-                <span style="color: #ced4da;">➔</span>
+                <span style="color: var(--border-dark);">➔</span>
                 <span>📥 3. 匯出 PDF</span>
             </div>
         </div>
     </div>
 
     <div class="card" id="editorCard" style="display: none;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <button id="btnRetake" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #6c757d; margin: 0;">🔙 重拍</button>
-                <h2 style="margin: 0; font-size: 1.1rem;">🎯 微調</h2>
-            </div>
-            <div style="display: flex; align-items: center; gap: 6px; justify-content: flex-end;">
+        <div class="action-toolbar">
+            <button id="btnRetake" style="flex-shrink: 0; width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #6c757d; margin: 0;">🔙 重拍</button>
+            <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                <button id="btnUndo" style="width: auto; padding: 6px 8px; font-size: 0.85rem; background-color: #6c757d; margin: 0;" title="上一步" disabled>↩️</button>
+                <button id="btnRedo" style="width: auto; padding: 6px 8px; font-size: 0.85rem; background-color: #6c757d; margin: 0;" title="下一步" disabled>↪️</button>
                 <div style="position: relative;">
                     <span id="filterActiveHint" style="display: none; position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 0.7rem; color: #ff9800; font-weight: bold; white-space: nowrap;">✨ 已套用</span>
                     <button id="openFiltersBtn" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #17a2b8; margin: 0;">🎛️ 濾鏡</button>
@@ -278,7 +332,7 @@
                 <div style="grid-column: 2 / 3; grid-row: 1 / 2; width: 100%;"><button id="btnUp" class="btn-nudge">⬆️</button></div>
                 <div style="grid-column: 1 / 2; grid-row: 2 / 3; width: 100%;"><button id="btnLeft" class="btn-nudge">⬅️</button></div>
                 <div style="grid-column: 2 / 3; grid-row: 2 / 3; width: 100%;">
-                    <select id="nudgeStep" style="padding: 6px 0; border-radius: 6px; border: 1px solid #ccc; font-size: 0.85rem; width: 100%; text-align: center; appearance: none; background: white;">
+                    <select id="nudgeStep" style="padding: 6px 0; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.85rem; width: 100%; text-align: center; appearance: none; background: var(--input-bg); color: var(--text-main);">
                         <option value="1">1px</option>
                         <option value="5" selected>5px</option>
                         <option value="10">10px</option>
@@ -291,25 +345,25 @@
             
             <!-- 右側：設定與吸附 -->
             <div style="flex: 1.2; display: flex; flex-direction: column; justify-content: space-between; gap: 6px;">
-                <select id="aspectRatio" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.85rem; width: 100%;">
+                <select id="aspectRatio" style="padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.85rem; width: 100%; background: var(--input-bg); color: var(--text-main);">
                     <option value="1.586">💳 證件 (1.586:1)</option>
                     <option value="1.414">📄 A4 (1.414:1)</option>
                     <option value="1.333">📸 4:3 照片</option>
                     <option value="1.778">📺 16:9 螢幕</option>
                     <option value="0">✂️ 自由比例</option>
                 </select>
-                <select id="outputResolution" style="padding: 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.85rem; width: 100%;">
+                <select id="outputResolution" style="padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.85rem; width: 100%; background: var(--input-bg); color: var(--text-main);">
                     <option value="0">🌟 原始畫質</option>
                     <option value="1920">📱 高畫質 1920px</option>
                     <option value="1080">💻 標準 1080px</option>
                     <option value="800">🌐 網路 800px</option>
                 </select>
-                <div style="background: #f8f9fa; padding: 6px; border-radius: 6px; border: 1px solid #e2e2e2;">
+                <div style="background: var(--hint-bg); padding: 6px; border-radius: 6px; border: 1px solid var(--border-light);">
                     <label style="cursor: pointer; font-size: 0.8rem; color: #007bff; font-weight: bold; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
                         <input type="checkbox" id="autoSnap" checked style="margin: 0;"> 🧲 自動吸附
                     </label>
                     <div id="snapStrengthContainer" style="display: flex; align-items: center; gap: 5px; transition: opacity 0.3s;">
-                        <span style="font-size: 0.75rem; color: #666; white-space: nowrap;">力道:<span id="snapStrengthValue">弱</span></span>
+                        <span style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">力道:<span id="snapStrengthValue">弱</span></span>
                         <input type="range" id="snapStrength" min="1" max="5" value="2" style="width: 100%; margin: 0;">
                     </div>
                 </div>
@@ -325,7 +379,7 @@
 
     <div class="card" id="resultCard" style="display: none;">
         <h2>✨ 處理結果</h2>
-        <div style="text-align: center; font-size: 0.9rem; color: #666; margin-bottom: 10px;">
+        <div style="text-align: center; font-size: 0.9rem; color: var(--text-muted); margin-bottom: 10px;">
             <span id="resultResolution"></span>
             <span id="resultSize" style="margin-left: 10px;"></span>
         </div>
@@ -344,7 +398,7 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <div>
                 <h2 style="margin: 0;">🎨 調整影像</h2>
-                <div style="font-size: 0.7rem; color: #888; margin-top: 4px;">💡 銳化效果於裁切後生效</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">💡 銳化效果於裁切後生效</div>
             </div>
             <div>
                 <button id="resetFiltersBtn" style="width: auto; padding: 6px 12px; margin: 0 5px 0 0; background-color: #6c757d; font-size: 0.9rem;">🔄 重置</button>
@@ -352,10 +406,10 @@
             </div>
         </div>
         <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-            <label style="flex: 1; cursor: pointer; text-align: center; background: #e9ecef; padding: 8px 4px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;">
+            <label style="flex: 1; cursor: pointer; text-align: center; background: var(--hint-bg); color: var(--text-main); padding: 8px 4px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;">
                 <input type="checkbox" id="chkGrayscale"> 🌑 黑白化
             </label>
-            <label style="flex: 1; cursor: pointer; text-align: center; background: #e9ecef; padding: 8px 4px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;" title="將圖片轉為純黑白，能有效移除陰影與背景紋理">
+            <label style="flex: 1; cursor: pointer; text-align: center; background: var(--hint-bg); color: var(--text-main); padding: 8px 4px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;" title="將圖片轉為純黑白，能有效移除陰影與背景紋理">
                 <input type="checkbox" id="chkBinarize"> 📄 文件強化
             </label>
         </div>
@@ -388,8 +442,8 @@
 
     <!-- 多頁預覽與管理視窗 -->
     <div id="pdfPreviewModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; overflow-y: auto; padding: 20px; box-sizing: border-box;">
-        <div style="background: white; border-radius: 12px; padding: 15px; max-width: 600px; margin: 0 auto; position: relative;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
+        <div style="background: var(--card-bg); border-radius: 12px; padding: 15px; max-width: 600px; margin: 0 auto; position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 10px; margin-bottom: 15px;">
                 <h2 style="margin: 0;">📄 預覽多頁文件</h2>
                 <button id="btnClosePreview" style="width: auto; padding: 6px 12px; background-color: #6c757d; margin: 0;">✖ 關閉</button>
             </div>
@@ -397,7 +451,7 @@
             <div id="pdfPreviewGallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 15px;">
             </div>
             <!-- 空狀態提示 -->
-            <div id="pdfPreviewEmpty" style="display: none; text-align: center; color: #666; padding: 20px 0;">
+            <div id="pdfPreviewEmpty" style="display: none; text-align: center; color: var(--text-muted); padding: 20px 0;">
                 目前沒有掃描任何文件喔！
             </div>
         </div>
@@ -407,8 +461,8 @@
     <canvas id="offscreenCanvas" style="display: none;"></canvas>
 
     <!-- 版本號顯示 -->
-    <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: #adb5bd; z-index: 9999; pointer-events: none; font-family: monospace;">
-        v2.0.1
+    <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: var(--border-dark); z-index: 9999; pointer-events: none; font-family: monospace;">
+        v2.0.2
     </div>
 
     <script>
@@ -442,6 +496,8 @@
         const pdfPreviewGallery = document.getElementById('pdfPreviewGallery');
         const pdfPreviewEmpty = document.getElementById('pdfPreviewEmpty');
         const btnRetake = document.getElementById('btnRetake');
+        const btnUndo = document.getElementById('btnUndo');
+        const btnRedo = document.getElementById('btnRedo');
         
         // 吸附力道 UI 控制
         const autoSnapCheckbox = document.getElementById('autoSnap');
@@ -489,6 +545,49 @@
         let draggingEdgeIdx = -1; // 紀錄目前正在拖拉的「邊」
         let selectedEdgeIdx = -1; // 紀錄目前被選中的「邊」
         let lastEdgeDragPoint = null; // 紀錄邊緣拖曳的上一幀座標
+        
+        // ==========================================
+        // 2.5 歷史紀錄 (Undo / Redo) 邏輯
+        // ==========================================
+        let pointsHistory = [];
+        let historyIndex = -1;
+
+        function savePointsState() {
+            // 如果在返回上一步後又做了新操作，則清除未來的歷史紀錄
+            if (historyIndex < pointsHistory.length - 1) {
+                pointsHistory = pointsHistory.slice(0, historyIndex + 1);
+            }
+            // 將當前的 4 個點深度複製 (Deep Copy) 並推入堆疊
+            pointsHistory.push(JSON.parse(JSON.stringify(points)));
+            
+            // 限制最多儲存 30 步，避免吃掉太多手機記憶體
+            if (pointsHistory.length > 30) {
+                pointsHistory.shift();
+            } else {
+                historyIndex++;
+            }
+            updateUndoRedoUI();
+        }
+
+        function updateUndoRedoUI() {
+            btnUndo.disabled = historyIndex <= 0;
+            btnRedo.disabled = historyIndex >= pointsHistory.length - 1;
+        }
+
+        btnUndo.addEventListener('click', () => {
+            if (historyIndex > 0) {
+                historyIndex--;
+                points = JSON.parse(JSON.stringify(pointsHistory[historyIndex]));
+                drawCanvas(); updateUndoRedoUI();
+            }
+        });
+        btnRedo.addEventListener('click', () => {
+            if (historyIndex < pointsHistory.length - 1) {
+                historyIndex++;
+                points = JSON.parse(JSON.stringify(pointsHistory[historyIndex]));
+                drawCanvas(); updateUndoRedoUI();
+            }
+        });
 
         /**
          * 更新濾鏡狀態提示 (若有調整且面板收起時，顯示「已套用濾鏡」)
@@ -631,6 +730,11 @@
             if (!yoloSuccess) {
                 autoDetectCornersLocal();
             }
+            
+            // 重置歷史紀錄，並儲存第一筆初始點位狀態
+            pointsHistory = [];
+            historyIndex = -1;
+            savePointsState();
         };
 
         // 處理照片選擇的共用邏輯 (加入記憶體防護預縮放)
@@ -1235,6 +1339,7 @@
                         snapPoint(draggingEdgeIdx);
                         snapPoint((draggingEdgeIdx + 1) % 4);
                     }
+                    savePointsState(); // 每次拖曳完成後，儲存狀態供復原
                 }
                 draggingIdx = -1;
                 draggingEdgeIdx = -1;
@@ -1262,12 +1367,14 @@
                 points[selectedIdx].x += dx * step;
                 points[selectedIdx].y += dy * step;
                 drawCanvas();
+                savePointsState(); // 每次方向鍵微調後儲存
             } else if (selectedEdgeIdx !== -1) {
                 points[selectedEdgeIdx].x += dx * step;
                 points[selectedEdgeIdx].y += dy * step;
                 points[(selectedEdgeIdx + 1) % 4].x += dx * step;
                 points[(selectedEdgeIdx + 1) % 4].y += dy * step;
                 drawCanvas();
+                savePointsState(); // 每次方向鍵微調後儲存
             }
         };
         document.getElementById('btnUp').addEventListener('click', () => nudgePoint(0, -1));
@@ -1563,10 +1670,10 @@
                 pdfPages.forEach((dataUrl, index) => {
                     const item = document.createElement('div');
                     item.style.position = 'relative';
-                    item.style.border = '2px solid #ccc'; // 加粗邊框，避免切換虛線時跳動
+                    item.style.border = '2px solid var(--border-color)'; // 加粗邊框，避免切換虛線時跳動
                     item.style.borderRadius = '8px';
                     item.style.overflow = 'hidden';
-                    item.style.backgroundColor = '#fff';
+                    item.style.backgroundColor = 'var(--card-bg)';
                     item.style.cursor = 'grab'; // 提示這是一個可抓取的物件
                     item.draggable = true; // 啟用 HTML5 原生拖曳功能
                     
@@ -1579,10 +1686,10 @@
                     pageNum.textContent = `第 ${index + 1} 頁`;
                     pageNum.style.textAlign = 'center';
                     pageNum.style.padding = '5px 0';
-                    pageNum.style.backgroundColor = '#f4f6f8';
+                    pageNum.style.backgroundColor = 'var(--hint-bg)';
                     pageNum.style.fontSize = '0.85rem';
                     pageNum.style.fontWeight = 'bold';
-                    pageNum.style.color = '#333';
+                    pageNum.style.color = 'var(--text-main)';
                     
                     const delBtn = document.createElement('button');
                     delBtn.innerHTML = '🗑️';
@@ -1634,7 +1741,7 @@
                     });
                     
                     item.addEventListener('dragleave', () => {
-                        item.style.borderColor = '#ccc';
+                        item.style.borderColor = 'var(--border-color)';
                         item.style.borderStyle = 'solid';
                     });
                     
