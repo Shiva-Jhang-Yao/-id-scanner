@@ -51,10 +51,34 @@
             will-change: transform;
         }
         
-        /* 濾鏡拉桿設計 */
-        .slider-group { margin-bottom: 6px; }
-        .slider-group label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 2px; }
-        input[type="range"] { width: 100%; margin: 2px 0; }
+        /* 濾鏡拉桿設計 (單行精簡排版) */
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .slider-group label {
+            width: 35px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: #495057;
+            margin: 0;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .slider-group span.val {
+            width: 32px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: #007bff;
+            text-align: left;
+            font-family: monospace;
+        }
+        input[type="range"] {
+            flex: 1;
+            margin: 0;
+        }
         
         button {
             width: 100%;
@@ -235,9 +259,11 @@
                 <button id="btnRetake" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #6c757d; margin: 0;">🔙 重拍</button>
                 <h2 style="margin: 0; font-size: 1.1rem;">🎯 微調</h2>
             </div>
-            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end;">
-                <span id="filterActiveHint" style="display: none; font-size: 0.75rem; color: #ff9800; font-weight: bold;">✨ 已套用濾鏡</span>
-                <button id="openFiltersBtn" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #17a2b8; margin: 0;">🎛️ 濾鏡</button>
+            <div style="display: flex; align-items: center; gap: 6px; justify-content: flex-end;">
+                <div style="position: relative;">
+                    <span id="filterActiveHint" style="display: none; position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 0.7rem; color: #ff9800; font-weight: bold; white-space: nowrap;">✨ 已套用</span>
+                    <button id="openFiltersBtn" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #17a2b8; margin: 0;">🎛️ 濾鏡</button>
+                </div>
                 <button id="btnRotate" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #6c757d; margin: 0;">🔃 旋轉</button>
             </div>
         </div>
@@ -316,7 +342,10 @@
     <!-- 懸浮控制面板 -->
     <div id="floatingControls">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <h2 style="margin: 0;">🎨 調整影像</h2>
+            <div>
+                <h2 style="margin: 0;">🎨 調整影像</h2>
+                <div style="font-size: 0.7rem; color: #888; margin-top: 4px;">💡 銳化效果於裁切後生效</div>
+            </div>
             <div>
                 <button id="resetFiltersBtn" style="width: auto; padding: 6px 12px; margin: 0 5px 0 0; background-color: #6c757d; font-size: 0.9rem;">🔄 重置</button>
                 <button id="closeFiltersBtn" style="width: auto; padding: 6px 12px; margin: 0; background-color: #6c757d; font-size: 0.9rem;">🔽 收起</button>
@@ -331,24 +360,29 @@
             </label>
         </div>
         <div class="slider-group">
-            <label><span>亮度 (Brightness)</span> <span id="val_b">100</span></label>
+            <label>亮度</label>
             <input type="range" id="slider_b" min="0" max="200" value="100">
+            <span class="val" id="val_b">100</span>
         </div>
         <div class="slider-group">
-            <label><span>對比度 (Contrast)</span> <span id="val_c">1.0</span></label>
+            <label>對比</label>
             <input type="range" id="slider_c" min="0" max="300" value="100">
+            <span class="val" id="val_c">1.0</span>
         </div>
         <div class="slider-group">
-            <label><span>飽和度 (Saturation)</span> <span id="val_s">1.0</span></label>
+            <label>飽和</label>
             <input type="range" id="slider_s" min="0" max="300" value="100">
+            <span class="val" id="val_s">1.0</span>
         </div>
         <div class="slider-group">
-            <label><span>降噪 (Denoise)</span> <span id="val_denoise">0.0</span></label>
+            <label>降噪</label>
             <input type="range" id="slider_denoise" min="0" max="100" value="0">
+            <span class="val" id="val_denoise">0.0</span>
         </div>
         <div class="slider-group">
-            <label><span>銳化 (Sharpness) <small style="font-weight:normal; color:#666;">(裁切後生效)</small></span> <span id="val_sharp">1.0</span></label>
+            <label>銳化</label>
             <input type="range" id="slider_sharp" min="0" max="200" value="100">
+            <span class="val" id="val_sharp">1.0</span>
         </div>
     </div>
 
@@ -374,7 +408,7 @@
 
     <!-- 版本號顯示 -->
     <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: #adb5bd; z-index: 9999; pointer-events: none; font-family: monospace;">
-        v2.0.0
+        v2.0.1
     </div>
 
     <script>
