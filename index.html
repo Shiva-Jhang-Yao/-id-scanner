@@ -169,6 +169,39 @@
         /* 方向鍵微調 */
         .btn-nudge { background-color: #6c757d; padding: 8px 0; font-size: 1.1rem; width: 100%; border-radius: 6px; border: none; color: white; cursor: pointer; }
         .hint-text { text-align: center; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px; }
+        .source-quality-note {
+            display: none;
+            background: var(--hint-bg);
+            border: 1px solid var(--border-light);
+            border-radius: 6px;
+            padding: 6px 8px;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            line-height: 1.4;
+            margin: -2px 0 10px 0;
+        }
+        .source-quality-note.warning {
+            background: #fff8e1;
+            border-color: #ffc107;
+            color: #6b5200;
+        }
+        .source-quality-note.ok {
+            background: #e8f5e9;
+            border-color: #81c784;
+            color: #1b5e20;
+        }
+        @media (prefers-color-scheme: dark) {
+            .source-quality-note.warning {
+                background: #332900;
+                border-color: #8a6d00;
+                color: #ffd866;
+            }
+            .source-quality-note.ok {
+                background: #0f2a16;
+                border-color: #2e7d32;
+                color: #a5d6a7;
+            }
+        }
 
         /* 下拉選單點擊與聚焦效果 */
         select {
@@ -325,6 +358,8 @@
             <canvas id="canvas"></canvas>
         </div>
         <div class="hint-text">👆 點擊角落/邊緣後，使用下方工具微調與設定</div>
+        <div id="sourceImageNotice" class="source-quality-note"></div>
+        <div id="qualityCheckNotice" class="source-quality-note"></div>
         
         <div style="display: flex; gap: 12px; margin-bottom: 12px;">
             <!-- 左側：十字方向鍵 -->
@@ -353,7 +388,7 @@
                     <option value="0">✂️ 自由比例</option>
                 </select>
                 <select id="outputResolution" style="padding: 6px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 0.85rem; width: 100%; background: var(--input-bg); color: var(--text-main);">
-                    <option value="0">🌟 原始畫質</option>
+                    <option value="0">🌟 目前載入畫質</option>
                     <option value="1920">📱 高畫質 1920px</option>
                     <option value="1080">💻 標準 1080px</option>
                     <option value="800">🌐 網路 800px</option>
@@ -383,6 +418,8 @@
             <span id="resultResolution"></span>
             <span id="resultSize" style="margin-left: 10px;"></span>
         </div>
+        <div id="resultSourceInfo" class="source-quality-note"></div>
+        <div id="resultQualityInfo" class="source-quality-note"></div>
         <img id="resultImage" alt="裁切結果">
         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px;">
             <button id="downloadJpgBtn" style="flex: 1 1 calc(50% - 4px); padding: 10px; font-size: 0.9rem; background-color: #28a745; margin: 0;">⬇️ 下載 JPG</button>
@@ -462,7 +499,7 @@
 
     <!-- 版本號顯示 -->
     <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: var(--border-dark); z-index: 9999; pointer-events: none; font-family: monospace;">
-        v2.0.2
+        v2.0.3
     </div>
 
     <script>
@@ -524,6 +561,9 @@
         // 2. 全域狀態變數 (Global State)
         // ==========================================
         let currentFile = null;
+        let currentImageObjectUrl = null;
+        let sourceImageInfo = null;
+        let imageQualityIssues = [];
         let pdfPages = []; // 儲存多頁文件的 Base64 陣列
         let draggedPdfIndex = null; // 紀錄目前正在拖曳的 PDF 頁面索引
         
@@ -538,6 +578,198 @@
             shareBtn.style.display = 'block';
         }
         let imageObj = new Image();
+
+        function revokeCurrentImageObjectUrl() {
+            if (!currentImageObjectUrl) return;
+            URL.revokeObjectURL(currentImageObjectUrl);
+            currentImageObjectUrl = null;
+        }
+
+        function setImageSourceFromFile(file) {
+            const nextUrl = URL.createObjectURL(file);
+            revokeCurrentImageObjectUrl();
+            currentImageObjectUrl = nextUrl;
+            imageObj.src = nextUrl;
+        }
+
+        function setImageSourceFromDataUrl(dataUrl) {
+            revokeCurrentImageObjectUrl();
+            imageObj.src = dataUrl;
+        }
+
+        function formatDimensions(width, height) {
+            return `${Math.round(width)} x ${Math.round(height)}`;
+        }
+
+        function getSourceImageMaxDimension(originalWidth, originalHeight) {
+            const selectedRatio = parseFloat(document.getElementById('aspectRatio').value);
+            const deviceMemory = Number(navigator.deviceMemory) || 4;
+            const isHighDetailDocument = selectedRatio === 1.414 || selectedRatio === 0;
+            const megapixels = (originalWidth * originalHeight) / 1000000;
+            const isHighResolutionPhoto = megapixels >= 8;
+
+            if (deviceMemory < 4) {
+                return isHighDetailDocument ? 2400 : 2000;
+            }
+
+            return (isHighDetailDocument || isHighResolutionPhoto) ? 3000 : 2400;
+        }
+
+        function getSourceQualityMessage() {
+            if (!sourceImageInfo || !sourceImageInfo.wasPreScaled) return '';
+
+            return `已為避免手機記憶體不足，將原圖 ${formatDimensions(sourceImageInfo.originalWidth, sourceImageInfo.originalHeight)} 預縮到 ${formatDimensions(sourceImageInfo.workingWidth, sourceImageInfo.workingHeight)}；「目前載入畫質」會以這個尺寸裁切。`;
+        }
+
+        function updateSourceQualityNotice() {
+            const message = getSourceQualityMessage();
+            ['sourceImageNotice', 'resultSourceInfo'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = message;
+                el.style.display = message ? 'block' : 'none';
+            });
+        }
+
+        function analyzeImageQuality() {
+            if (!imageObj.width || !imageObj.height) return [];
+
+            const issues = [];
+            const maxDim = 320;
+            const scale = Math.min(maxDim / imageObj.width, maxDim / imageObj.height, 1);
+            const width = Math.max(1, Math.round(imageObj.width * scale));
+            const height = Math.max(1, Math.round(imageObj.height * scale));
+            const sampleCanvas = document.createElement('canvas');
+            sampleCanvas.width = width;
+            sampleCanvas.height = height;
+            const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+            sampleCtx.drawImage(imageObj, 0, 0, width, height);
+
+            const pixels = sampleCtx.getImageData(0, 0, width, height).data;
+            const gray = new Float32Array(width * height);
+            let sum = 0;
+            let sumSq = 0;
+            let veryBright = 0;
+            let veryDark = 0;
+
+            for (let i = 0, p = 0; i < pixels.length; i += 4, p++) {
+                const value = pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+                gray[p] = value;
+                sum += value;
+                sumSq += value * value;
+                if (value > 245) veryBright++;
+                if (value < 10) veryDark++;
+            }
+
+            const total = gray.length;
+            const mean = sum / total;
+            const stdDev = Math.sqrt(Math.max(0, sumSq / total - mean * mean));
+            const brightRatio = veryBright / total;
+            const darkRatio = veryDark / total;
+
+            let lapSum = 0;
+            let lapSumSq = 0;
+            let lapCount = 0;
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const idx = y * width + x;
+                    const lap = -4 * gray[idx] + gray[idx - 1] + gray[idx + 1] + gray[idx - width] + gray[idx + width];
+                    lapSum += lap;
+                    lapSumSq += lap * lap;
+                    lapCount++;
+                }
+            }
+
+            const blurScore = lapCount > 0 ? (lapSumSq / lapCount) - (lapSum / lapCount) ** 2 : 0;
+            const minSide = Math.min(imageObj.width, imageObj.height);
+            const maxSide = Math.max(imageObj.width, imageObj.height);
+
+            if (maxSide < 1200 || minSide < 700) {
+                issues.push(`解析度偏低 (${formatDimensions(imageObj.width, imageObj.height)})，細字或 A4 文件可能不清楚。`);
+            }
+            if (blurScore < 15) {
+                issues.push('照片明顯偏糊，建議重拍並保持手機穩定。');
+            } else if (blurScore < 35) {
+                issues.push('照片銳利度偏低，若文字很小，建議放大對焦後重拍。');
+            }
+            if (brightRatio > 0.45 && mean > 210) {
+                issues.push('亮部比例過高，若有反光或文字泛白，建議避開強光重拍。');
+            }
+            if (darkRatio > 0.35 && mean < 70) {
+                issues.push('畫面偏暗，建議增加照明後重拍。');
+            }
+            if (stdDev < 18) {
+                issues.push('整體對比偏低，文件邊界或文字可能不容易辨識。');
+            }
+
+            return issues;
+        }
+
+        function getPolygonArea(poly) {
+            if (poly.length !== 4) return 0;
+            let area = 0;
+            for (let i = 0; i < poly.length; i++) {
+                const next = poly[(i + 1) % poly.length];
+                area += poly[i].x * next.y - next.x * poly[i].y;
+            }
+            return Math.abs(area) / 2;
+        }
+
+        function orientation(a, b, c) {
+            return (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
+        }
+
+        function segmentsIntersect(a, b, c, d) {
+            const o1 = orientation(a, b, c);
+            const o2 = orientation(a, b, d);
+            const o3 = orientation(c, d, a);
+            const o4 = orientation(c, d, b);
+            return (o1 * o2 < 0) && (o3 * o4 < 0);
+        }
+
+        function getCropQualityIssues() {
+            if (points.length !== 4 || !imageObj.width || !imageObj.height) return [];
+
+            const issues = [];
+            const imageArea = imageObj.width * imageObj.height;
+            const cropAreaRatio = getPolygonArea(points) / imageArea;
+            const minMargin = Math.min(
+                ...points.map(p => Math.min(p.x, p.y, imageObj.width - p.x, imageObj.height - p.y))
+            );
+            const minMarginRatio = minMargin / Math.max(imageObj.width, imageObj.height);
+
+            if (segmentsIntersect(points[0], points[1], points[2], points[3]) || segmentsIntersect(points[1], points[2], points[3], points[0])) {
+                issues.push('裁切框疑似交叉，請重新調整四個角的位置。');
+            }
+            if (cropAreaRatio < 0.08) {
+                issues.push('文件在照片中占比偏小，建議靠近一點重拍以保留細節。');
+            } else if (cropAreaRatio > 0.92) {
+                issues.push('文件幾乎貼滿照片，邊界可能被裁掉，建議留一點外圍背景。');
+            }
+            if (minMarginRatio < 0.01) {
+                issues.push('有角點太靠近照片邊緣，請確認證件四角沒有被拍掉。');
+            }
+
+            return issues;
+        }
+
+        function updateQualityCheckNotice() {
+            const issues = [...imageQualityIssues, ...getCropQualityIssues()];
+            const hasIssues = issues.length > 0;
+            const message = hasIssues
+                ? `品質提醒：${issues.join(' ')}`
+                : '品質檢查通過：未發現明顯模糊、曝光或裁切框問題。';
+
+            ['qualityCheckNotice', 'resultQualityInfo'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = message;
+                el.classList.toggle('warning', hasIssues);
+                el.classList.toggle('ok', !hasIssues);
+                el.style.display = 'block';
+            });
+        }
+
         let points = []; // [{x, y}, {x, y}, {x, y}, {x, y}]
         let draggingIdx = -1;
         let selectedIdx = 0; // 紀錄目前被選中的點
@@ -567,6 +799,7 @@
                 historyIndex++;
             }
             updateUndoRedoUI();
+            updateQualityCheckNotice();
         }
 
         function updateUndoRedoUI() {
@@ -578,14 +811,14 @@
             if (historyIndex > 0) {
                 historyIndex--;
                 points = JSON.parse(JSON.stringify(pointsHistory[historyIndex]));
-                drawCanvas(); updateUndoRedoUI();
+                drawCanvas(); updateUndoRedoUI(); updateQualityCheckNotice();
             }
         });
         btnRedo.addEventListener('click', () => {
             if (historyIndex < pointsHistory.length - 1) {
                 historyIndex++;
                 points = JSON.parse(JSON.stringify(pointsHistory[historyIndex]));
-                drawCanvas(); updateUndoRedoUI();
+                drawCanvas(); updateUndoRedoUI(); updateQualityCheckNotice();
             }
         });
 
@@ -627,16 +860,50 @@
         // AI 與 OpenCV 引擎初始化
         let cvReady = false;
         let yoloModel = null;
+        let yoloClassNames = [];
+
+        function parseYoloClassNames(metadataText) {
+            const names = [];
+            let insideNamesBlock = false;
+
+            metadataText.split('\n').forEach(line => {
+                if (/^names:\s*$/.test(line)) {
+                    insideNamesBlock = true;
+                    return;
+                }
+
+                if (!insideNamesBlock) return;
+                if (/^\S/.test(line)) {
+                    insideNamesBlock = false;
+                    return;
+                }
+
+                const match = line.match(/^\s*(\d+):\s*['"]?([^'"]+)['"]?\s*$/);
+                if (match) names[Number(match[1])] = match[2].trim();
+            });
+
+            return names;
+        }
         
         async function loadYoloModel() {
             try {
                 // 嘗試載入 YOLO TFJS 模型
                 await tf.setBackend('webgl'); // 強制啟用 WebGL 顯示卡硬體加速
                 await tf.ready();
+
+                const metadataText = await fetch('./model_web/metadata.yaml', { cache: 'no-store' })
+                    .then(res => res.ok ? res.text() : '');
+                yoloClassNames = parseYoloClassNames(metadataText);
+
+                if (yoloClassNames[0] !== 'id_card') {
+                    throw new Error(`目前 model_web 不是證件模型，class 0 = ${yoloClassNames[0] || 'unknown'}`);
+                }
+
                 yoloModel = await tf.loadGraphModel('./model_web/model.json');
-                console.log("✅ YOLO TF.js 模型載入成功！");
+                console.log("✅ YOLO 證件模型載入成功！");
             } catch (e) {
-                console.log("⚠️ 找不到 YOLO 模型，將自動使用 OpenCV 傳統邊緣偵測作為備案。");
+                yoloModel = null;
+                console.warn("⚠️ YOLO 證件模型不可用，將自動使用 OpenCV 傳統邊緣偵測作為備案。", e);
             }
         }
         
@@ -707,6 +974,8 @@
 
         // 將圖片載入完成的邏輯獨立出來，以便旋轉後能重複使用
         imageObj.onload = async () => {
+            revokeCurrentImageObjectUrl();
+
             canvas.width = imageObj.width;
             canvas.height = imageObj.height;
             document.getElementById('uploadCard').style.display = 'none'; // 隱藏首頁區塊，節省空間
@@ -724,6 +993,8 @@
             selectedEdgeIdx = -1;
             drawCanvas();
             updateFilterHint(); // 載入新圖時重置提示
+            updateSourceQualityNotice();
+            imageQualityIssues = analyzeImageQuality();
             
             // 優先嘗試純前端 YOLO 推論，若失敗或未載入則退回 OpenCV 邊緣偵測
             let yoloSuccess = await runYoloInference();
@@ -743,14 +1014,19 @@
             let file = e.target.files[0];
             
             const tempImg = new Image();
+            const tempUrl = URL.createObjectURL(file);
             tempImg.onload = () => {
-                const MAX_DIM = 2000; // 限制最大邊長為 2000 像素
-                let width = tempImg.width;
-                let height = tempImg.height;
+                URL.revokeObjectURL(tempUrl);
+
+                const originalWidth = tempImg.width;
+                const originalHeight = tempImg.height;
+                const maxSourceDim = getSourceImageMaxDimension(originalWidth, originalHeight);
+                let width = originalWidth;
+                let height = originalHeight;
                 
-                if (width > MAX_DIM || height > MAX_DIM) {
-                    console.log(`📸 圖片過大 (${tempImg.width}x${tempImg.height})，執行防閃退預縮放...`);
-                    const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+                if (width > maxSourceDim || height > maxSourceDim) {
+                    console.log(`📸 圖片過大 (${originalWidth}x${originalHeight})，執行防閃退預縮放至長邊 ${maxSourceDim}px...`);
+                    const ratio = Math.min(maxSourceDim / width, maxSourceDim / height);
                     width = Math.round(width * ratio);
                     height = Math.round(height * ratio);
                     
@@ -761,15 +1037,39 @@
                     offCtx.drawImage(tempImg, 0, 0, width, height);
                     
                     offCanvas.toBlob((blob) => {
+                        if (!blob) {
+                            console.error('圖片預縮放失敗');
+                            return;
+                        }
+                        sourceImageInfo = {
+                            originalWidth,
+                            originalHeight,
+                            workingWidth: width,
+                            workingHeight: height,
+                            maxSourceDim,
+                            wasPreScaled: true
+                        };
                         currentFile = new File([blob], file.name, { type: 'image/jpeg' });
-                        imageObj.src = URL.createObjectURL(currentFile);
+                        setImageSourceFromFile(currentFile);
                     }, 'image/jpeg', 0.95);
                 } else {
+                    sourceImageInfo = {
+                        originalWidth,
+                        originalHeight,
+                        workingWidth: width,
+                        workingHeight: height,
+                        maxSourceDim,
+                        wasPreScaled: false
+                    };
                     currentFile = file;
-                    imageObj.src = URL.createObjectURL(currentFile);
+                    setImageSourceFromFile(currentFile);
                 }
             };
-            tempImg.src = URL.createObjectURL(file);
+            tempImg.onerror = () => {
+                URL.revokeObjectURL(tempUrl);
+                console.error('圖片載入失敗');
+            };
+            tempImg.src = tempUrl;
             
             // 清空 input，確保即使重複選取同一張照片也能觸發更新
             e.target.value = '';
@@ -844,8 +1144,273 @@
             while(n--) { u8arr[n] = bstr.charCodeAt(n); }
             
             currentFile = new File([u8arr], "rotated.jpg", {type: mime});
-            imageObj.src = dataUrl; // 觸發 onload，自動重設畫布與呼叫 YOLO
+            if (sourceImageInfo) {
+                sourceImageInfo = {
+                    ...sourceImageInfo,
+                    originalWidth: sourceImageInfo.originalHeight,
+                    originalHeight: sourceImageInfo.originalWidth,
+                    workingWidth: offCanvas.width,
+                    workingHeight: offCanvas.height
+                };
+            }
+            setImageSourceFromDataUrl(dataUrl); // 觸發 onload，自動重設畫布與呼叫 YOLO
         });
+
+        function clampNumber(value, min, max) {
+            return Math.max(min, Math.min(max, value));
+        }
+
+        function boxIoU(a, b) {
+            const x1 = Math.max(a.x1, b.x1);
+            const y1 = Math.max(a.y1, b.y1);
+            const x2 = Math.min(a.x2, b.x2);
+            const y2 = Math.min(a.y2, b.y2);
+            const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+            const areaA = Math.max(0, a.x2 - a.x1) * Math.max(0, a.y2 - a.y1);
+            const areaB = Math.max(0, b.x2 - b.x1) * Math.max(0, b.y2 - b.y1);
+            return intersection / Math.max(1, areaA + areaB - intersection);
+        }
+
+        function applyNms(candidates, iouThreshold = 0.45) {
+            const sorted = [...candidates].sort((a, b) => b.conf - a.conf);
+            const kept = [];
+
+            for (const candidate of sorted) {
+                if (kept.every(item => boxIoU(item, candidate) < iouThreshold)) {
+                    kept.push(candidate);
+                }
+            }
+
+            return kept;
+        }
+
+        function orderQuadrilateral(quad) {
+            const sums = quad.map(p => p.x + p.y);
+            const diffs = quad.map(p => p.x - p.y);
+            return [
+                quad[sums.indexOf(Math.min(...sums))],
+                quad[diffs.indexOf(Math.max(...diffs))],
+                quad[sums.indexOf(Math.max(...sums))],
+                quad[diffs.indexOf(Math.min(...diffs))]
+            ];
+        }
+
+        function isUsableQuad(quad) {
+            if (!quad || quad.length !== 4) return false;
+            if (quad.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return false;
+
+            const uniqueCount = new Set(quad.map(p => `${Math.round(p.x)},${Math.round(p.y)}`)).size;
+            if (uniqueCount < 4) return false;
+
+            const areaRatio = getPolygonArea(quad) / Math.max(1, imageObj.width * imageObj.height);
+            return areaRatio >= 0.03 && areaRatio <= 0.98;
+        }
+
+        function readYoloDetectionRows(outputTensor) {
+            const squeezed = outputTensor.squeeze();
+            if (squeezed.shape.length !== 2) {
+                squeezed.dispose();
+                throw new Error(`不支援的 YOLO 輸出形狀: ${outputTensor.shape.join('x')}`);
+            }
+
+            let rowsTensor = squeezed;
+            if (squeezed.shape[0] < squeezed.shape[1]) {
+                rowsTensor = squeezed.transpose();
+                squeezed.dispose();
+            }
+
+            const rows = rowsTensor.arraySync();
+            rowsTensor.dispose();
+            return rows;
+        }
+
+        function buildYoloCandidates(rows, classIndex, classCount) {
+            const inputSize = 640;
+            const confThreshold = 0.3;
+            const maskStart = 4 + classCount;
+            const candidates = [];
+
+            for (const row of rows) {
+                const conf = row[4 + classIndex];
+                if (!Number.isFinite(conf) || conf < confThreshold) continue;
+
+                const cx = row[0], cy = row[1], w = row[2], h = row[3];
+                const x1 = clampNumber(cx - w / 2, 0, inputSize);
+                const y1 = clampNumber(cy - h / 2, 0, inputSize);
+                const x2 = clampNumber(cx + w / 2, 0, inputSize);
+                const y2 = clampNumber(cy + h / 2, 0, inputSize);
+                if ((x2 - x1) < 5 || (y2 - y1) < 5) continue;
+
+                candidates.push({
+                    conf,
+                    x1, y1, x2, y2,
+                    maskCoeffs: row.length > maskStart ? row.slice(maskStart) : []
+                });
+            }
+
+            return candidates;
+        }
+
+        function getProtoLayout(protoTensor) {
+            const shape = protoTensor.shape;
+            if (shape.length === 4) {
+                if (shape[1] <= 64) {
+                    return {
+                        channels: shape[1],
+                        height: shape[2],
+                        width: shape[3],
+                        index: (x, y, c) => ((c * shape[2] + y) * shape[3] + x)
+                    };
+                }
+                return {
+                    channels: shape[3],
+                    height: shape[1],
+                    width: shape[2],
+                    index: (x, y, c) => ((y * shape[2] + x) * shape[3] + c)
+                };
+            }
+
+            if (shape.length === 3) {
+                if (shape[0] <= 64) {
+                    return {
+                        channels: shape[0],
+                        height: shape[1],
+                        width: shape[2],
+                        index: (x, y, c) => ((c * shape[1] + y) * shape[2] + x)
+                    };
+                }
+                return {
+                    channels: shape[2],
+                    height: shape[0],
+                    width: shape[1],
+                    index: (x, y, c) => ((y * shape[1] + x) * shape[2] + c)
+                };
+            }
+
+            return null;
+        }
+
+        function contourToMaskQuad(contour) {
+            const peri = cv.arcLength(contour, true);
+            const approx = new cv.Mat();
+
+            try {
+                for (const eps of [0.01, 0.02, 0.03, 0.04, 0.06, 0.08]) {
+                    cv.approxPolyDP(contour, approx, eps * peri, true);
+                    if (approx.rows === 4) {
+                        const quad = [];
+                        for (let i = 0; i < 4; i++) {
+                            quad.push({ x: approx.data32S[i * 2], y: approx.data32S[i * 2 + 1] });
+                        }
+                        return orderQuadrilateral(quad);
+                    }
+                }
+            } finally {
+                approx.delete();
+            }
+
+            const extreme = [];
+            for (let i = 0; i < contour.rows; i++) {
+                extreme.push({ x: contour.data32S[i * 2], y: contour.data32S[i * 2 + 1] });
+            }
+            if (extreme.length < 4) return null;
+            return orderQuadrilateral(extreme);
+        }
+
+        function maskQuadToImagePoints(maskQuad, maskWidth, maskHeight) {
+            const inputSize = 640;
+            const scaleX = imageObj.width / inputSize;
+            const scaleY = imageObj.height / inputSize;
+
+            const mapped = maskQuad.map(p => ({
+                x: clampNumber((p.x / Math.max(1, maskWidth - 1)) * inputSize * scaleX, 0, imageObj.width),
+                y: clampNumber((p.y / Math.max(1, maskHeight - 1)) * inputSize * scaleY, 0, imageObj.height)
+            }));
+
+            return orderQuadrilateral(mapped);
+        }
+
+        function tryDecodeYoloMaskQuad(protoTensor, detection) {
+            if (!cvReady || !protoTensor || !detection.maskCoeffs.length) return null;
+
+            const layout = getProtoLayout(protoTensor);
+            if (!layout || detection.maskCoeffs.length < layout.channels) return null;
+
+            const protoData = protoTensor.dataSync();
+            const inputSize = 640;
+            const x1 = Math.floor((detection.x1 / inputSize) * layout.width);
+            const y1 = Math.floor((detection.y1 / inputSize) * layout.height);
+            const x2 = Math.ceil((detection.x2 / inputSize) * layout.width);
+            const y2 = Math.ceil((detection.y2 / inputSize) * layout.height);
+
+            let mask = null;
+            let contours = null;
+            let hierarchy = null;
+            let kernel = null;
+            let bestContour = null;
+
+            try {
+                mask = cv.Mat.zeros(layout.height, layout.width, cv.CV_8UC1);
+
+                for (let y = Math.max(0, y1); y < Math.min(layout.height, y2); y++) {
+                    for (let x = Math.max(0, x1); x < Math.min(layout.width, x2); x++) {
+                        let value = 0;
+                        for (let c = 0; c < layout.channels; c++) {
+                            value += detection.maskCoeffs[c] * protoData[layout.index(x, y, c)];
+                        }
+                        const probability = 1 / (1 + Math.exp(-value));
+                        if (probability > 0.5) mask.ucharPtr(y, x)[0] = 255;
+                    }
+                }
+
+                kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+                cv.morphologyEx(mask, mask, cv.MORPH_CLOSE, kernel, new cv.Point(-1, -1), 1);
+
+                contours = new cv.MatVector();
+                hierarchy = new cv.Mat();
+                cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                let bestArea = 0;
+                for (let i = 0; i < contours.size(); i++) {
+                    const contour = contours.get(i);
+                    const area = cv.contourArea(contour);
+                    if (area > bestArea) {
+                        if (bestContour) bestContour.delete();
+                        bestContour = contour;
+                        bestArea = area;
+                    } else {
+                        contour.delete();
+                    }
+                }
+
+                if (!bestContour || bestArea < 20) return null;
+                const maskQuad = contourToMaskQuad(bestContour);
+                if (!maskQuad) return null;
+
+                const imageQuad = maskQuadToImagePoints(maskQuad, layout.width, layout.height);
+                return isUsableQuad(imageQuad) ? imageQuad : null;
+            } catch (err) {
+                console.warn('YOLO mask 後處理失敗，改用外框。', err);
+                return null;
+            } finally {
+                if (bestContour) bestContour.delete();
+                if (kernel) kernel.delete();
+                if (mask) mask.delete();
+                if (contours) contours.delete();
+                if (hierarchy) hierarchy.delete();
+            }
+        }
+
+        function detectionBoxToImagePoints(detection) {
+            const scaleX = imageObj.width / 640;
+            const scaleY = imageObj.height / 640;
+            return [
+                { x: detection.x1 * scaleX, y: detection.y1 * scaleY },
+                { x: detection.x2 * scaleX, y: detection.y1 * scaleY },
+                { x: detection.x2 * scaleX, y: detection.y2 * scaleY },
+                { x: detection.x1 * scaleX, y: detection.y2 * scaleY }
+            ];
+        }
 
         /**
          * 執行 TensorFlow.js (YOLO) 模型進行證件邊界預測
@@ -853,53 +1418,56 @@
          */
         async function runYoloInference() {
             if (!yoloModel) return false;
+            const idCardClassIndex = yoloClassNames.indexOf('id_card');
+            if (idCardClassIndex === -1) return false;
+
+            let tensor = null;
+            let resized = null;
+            let scaled = null;
+            let normalized = null;
+            let predictions = null;
+
             try {
                 // 1. 圖片前處理：轉 Tensor、縮放至 640x640、正規化並擴充維度 [1, 640, 640, 3]
-                const tensor = tf.browser.fromPixels(imageObj);
-                const resized = tf.image.resizeBilinear(tensor, [640, 640]);
-                const normalized = resized.div(255.0).expandDims(0);
+                tensor = tf.browser.fromPixels(imageObj);
+                resized = tf.image.resizeBilinear(tensor, [640, 640]);
+                scaled = resized.div(255.0);
+                normalized = scaled.expandDims(0);
                 
                 // 2. 執行推論
-                const predictions = await yoloModel.executeAsync(normalized);
+                predictions = await yoloModel.executeAsync(normalized);
                 const output0 = Array.isArray(predictions) ? predictions[0] : predictions;
+                const protoOutput = Array.isArray(predictions) ? predictions[1] : null;
                 
-                // 3. 解析輸出 [1, 37, 8400] -> 轉置為 [8400, 37] 方便迴圈處理
-                const data = output0.squeeze().transpose(); 
-                const dataArray = data.arraySync();
-                
-                let bestConf = 0;
-                let bestBox = null;
-                
-                // 解析 YOLOv8 輸出陣列，格式為：[cx, cy, w, h, class0_prob, mask_weights...]
-                for (let i = 0; i < dataArray.length; i++) {
-                    const row = dataArray[i];
-                    const conf = row[4]; // 取得第一個類別(證件)的信心度
-                    if (conf > bestConf) {
-                        bestConf = conf;
-                        bestBox = { cx: row[0], cy: row[1], w: row[2], h: row[3] };
-                    }
-                }
-                
-                // 4. 清理 Tensor 釋放記憶體 (非常重要！)
-                tf.dispose([tensor, resized, normalized, predictions, output0, data]);
-                
-                // 5. 如果信心度大於 30%，將 640x640 的座標還原回真實照片解析度
-                if (bestBox && bestConf > 0.3) {
-                    const scaleX = imageObj.width / 640;
-                    const scaleY = imageObj.height / 640;
-                    
-                    const x1 = (bestBox.cx - bestBox.w / 2) * scaleX;
-                    const y1 = (bestBox.cy - bestBox.h / 2) * scaleY;
-                    const x2 = (bestBox.cx + bestBox.w / 2) * scaleX;
-                    const y2 = (bestBox.cy + bestBox.h / 2) * scaleY;
-                    
-                    points = [{x: x1, y: y1}, {x: x2, y: y1}, {x: x2, y: y2}, {x: x1, y: y2}];
+                // 3. 解析輸出，支援 [1, channels, anchors] 或 [1, anchors, channels]
+                const rows = readYoloDetectionRows(output0);
+                const candidates = buildYoloCandidates(rows, idCardClassIndex, yoloClassNames.length);
+                const detections = applyNms(candidates, 0.45);
+                const bestDetection = detections[0];
+
+                if (bestDetection) {
+                    const maskPoints = tryDecodeYoloMaskQuad(protoOutput, bestDetection);
+                    points = maskPoints || detectionBoxToImagePoints(bestDetection);
                     selectedIdx = 0; drawCanvas();
                     selectedEdgeIdx = -1;
+                    updateQualityCheckNotice();
+                    console.log(`✅ YOLO 偵測成功，信心度 ${(bestDetection.conf * 100).toFixed(1)}%，候選 ${candidates.length} 個，NMS 後 ${detections.length} 個。`);
                     return true;
                 }
                 return false;
-            } catch(e) { console.error("YOLO 推論失敗", e); return false; }
+            } catch(e) {
+                console.error("YOLO 推論失敗", e);
+                return false;
+            } finally {
+                if (tensor) tensor.dispose();
+                if (resized) resized.dispose();
+                if (scaled) scaled.dispose();
+                if (normalized) normalized.dispose();
+                if (predictions) {
+                    if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
+                    else predictions.dispose();
+                }
+            }
         }
 
         // 呼叫 OpenCV.js 在本機端自動抓 4 個角
@@ -1396,15 +1964,34 @@
                 let src = cv.imread(imageObj);
                 
                 // --------------------------------------------------
-                // 步驟 1：排序 4 個點 (順序為 左上 tl, 右上 tr, 右下 br, 左下 bl)
+                // 步驟 1：順時針排序 4 個點並確保最長邊為頂部
                 // --------------------------------------------------
-                let sums = points.map(p => p.x + p.y);
-                let diffs = points.map(p => p.x - p.y);
+                // 1.1 計算中心點
+                let cx = (points[0].x + points[1].x + points[2].x + points[3].x) / 4;
+                let cy = (points[0].y + points[1].y + points[2].y + points[3].y) / 4;
                 
-                let tl = points[sums.indexOf(Math.min(...sums))];
-                let br = points[sums.indexOf(Math.max(...sums))];
-                let tr = points[diffs.indexOf(Math.max(...diffs))];
-                let bl = points[diffs.indexOf(Math.min(...diffs))];
+                // 1.2 依據角度順時針排序
+                let sortedPoints = [...points].sort((a, b) => {
+                    return Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx);
+                });
+                
+                // 1.3 找出最長的一條邊，確保裁切輸出為橫向 (Landscape)
+                let dists = [];
+                for(let i = 0; i < 4; i++) {
+                    let next = (i + 1) % 4;
+                    dists.push(Math.hypot(sortedPoints[i].x - sortedPoints[next].x, sortedPoints[i].y - sortedPoints[next].y));
+                }
+                let maxIdx = dists.indexOf(Math.max(...dists));
+                
+                // 1.4 若最長邊在垂直兩側(索引 1 或 3)，將陣列滾動一格，旋轉 90 度
+                if (maxIdx === 1 || maxIdx === 3) {
+                    sortedPoints.push(sortedPoints.shift());
+                }
+                
+                let tl = sortedPoints[0];
+                let tr = sortedPoints[1];
+                let br = sortedPoints[2];
+                let bl = sortedPoints[3];
                 
                 let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
                 
@@ -1530,6 +2117,7 @@
                 floatingControls.classList.remove('visible');
                 document.body.classList.remove('controls-visible');
                 document.getElementById('resultCard').style.display = 'block';
+                updateQualityCheckNotice();
                 updatePdfCartVisibility();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 
