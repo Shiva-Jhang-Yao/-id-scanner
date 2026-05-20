@@ -300,13 +300,59 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        .engine-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 12px 0;
+            padding: 10px 12px;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            background: var(--hint-bg);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        .engine-status .spinner {
+            width: 18px;
+            height: 18px;
+            border-width: 3px;
+            margin: 0;
+            flex-shrink: 0;
+        }
+        .engine-status.ready {
+            color: #1b5e20;
+            border-color: #81c784;
+            background: #e8f5e9;
+        }
+        .engine-status.warning {
+            color: #6b5200;
+            border-color: #ffc107;
+            background: #fff8e1;
+        }
+        .engine-status.ready .spinner,
+        .engine-status.warning .spinner {
+            display: none;
+        }
+        @media (prefers-color-scheme: dark) {
+            .engine-status.ready {
+                color: #a5d6a7;
+                border-color: #2e7d32;
+                background: #0f2a16;
+            }
+            .engine-status.warning {
+                color: #ffd866;
+                border-color: #8a6d00;
+                background: #332900;
+            }
+        }
     </style>
 </head>
 <body ontouchstart=""> <!-- 加上 ontouchstart 讓 iOS Safari 能完美觸發 button:active 點擊特效 -->
 
-    <div id="cvLoading" style="text-align: center; margin: 40px 20px; font-weight: bold; color: #007bff;">
+    <div id="cvLoading" class="engine-status">
         <div class="spinner"></div>
-        <div>⚙️ 正在載入本機端 AI 與影像引擎，請稍候...</div>
+        <div id="engineStatusText">正在背景載入 AI 與影像引擎；你可以先拍照或選取照片。</div>
     </div>
 
     <!-- 多頁文件購物車提示 -->
@@ -321,7 +367,7 @@
         </div>
     </div>
 
-    <div class="card" id="uploadCard" style="display: none;">
+    <div class="card" id="uploadCard" style="display: block;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <h2 style="margin: 0; font-size: 1.1rem;">📷 1. 載入照片</h2>
         </div>
@@ -515,7 +561,7 @@
 
     <!-- 版本號顯示 -->
     <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: var(--border-dark); z-index: 9999; pointer-events: none; font-family: monospace;">
-        v2.0.5
+        v2.0.6
     </div>
 
     <script>
@@ -529,6 +575,8 @@
         const processBtn = document.getElementById('processBtn');
         const resetBtn = document.getElementById('resetBtn');
         const loading = document.getElementById('loading');
+        const engineStatus = document.getElementById('cvLoading');
+        const engineStatusText = document.getElementById('engineStatusText');
         const downloadJpgBtn = document.getElementById('downloadJpgBtn');
         const addToPdfBtn = document.getElementById('addToPdfBtn');
         const downloadPdfBtn = document.getElementById('downloadPdfBtn');
@@ -875,8 +923,83 @@
 
         // AI 與 OpenCV 引擎初始化
         let cvReady = false;
+        let tfReady = typeof tf !== 'undefined';
         let yoloModel = null;
         let yoloClassNames = [];
+        let yoloStatus = 'idle';
+        let yoloLoadPromise = null;
+        let yoloLoadScheduled = false;
+        let engineStatusHideTimer = null;
+        let pendingOpenCvAutoDetect = false;
+        let allowDeferredAutoDetect = false;
+
+        function setEngineStatus(message, state = 'loading') {
+            if (!engineStatus || !engineStatusText) return;
+            clearTimeout(engineStatusHideTimer);
+            engineStatus.style.display = 'flex';
+            engineStatus.classList.toggle('ready', state === 'ready');
+            engineStatus.classList.toggle('warning', state === 'warning');
+            engineStatusText.textContent = message;
+
+            if (state === 'ready') {
+                engineStatusHideTimer = setTimeout(() => {
+                    engineStatus.style.display = 'none';
+                }, 2500);
+            }
+        }
+
+        function updateEngineStatus() {
+            if (!cvReady) {
+                setEngineStatus('影像引擎正在背景載入；你可以先拍照或選取照片。');
+                return;
+            }
+
+            if (yoloStatus === 'ready') {
+                setEngineStatus('AI 模型已就緒。', 'ready');
+            } else if (yoloStatus === 'failed') {
+                setEngineStatus('基礎影像引擎已就緒；AI 模型暫不可用，將使用基礎偵測。', 'warning');
+            } else {
+                setEngineStatus('基礎影像引擎已就緒；AI 模型正在背景載入。');
+            }
+        }
+
+        function updateProcessButtonState() {
+            if (document.getElementById('editorCard').style.display !== 'block') return;
+            processBtn.disabled = !cvReady;
+            processBtn.textContent = cvReady ? '✂️ 裁切圖片' : '⏳ 影像引擎載入中';
+        }
+
+        function runPendingOpenCvAutoDetect() {
+            if (!pendingOpenCvAutoDetect || !allowDeferredAutoDetect || !cvReady) return;
+            if (document.getElementById('editorCard').style.display !== 'block') return;
+
+            pendingOpenCvAutoDetect = false;
+            allowDeferredAutoDetect = false;
+            if (autoDetectCornersLocal()) {
+                savePointsState();
+            } else {
+                updateQualityCheckNotice();
+            }
+        }
+
+        function startYoloBackgroundLoad() {
+            if (!tfReady || yoloLoadPromise || yoloLoadScheduled || yoloStatus === 'ready' || yoloStatus === 'failed') return;
+
+            yoloLoadScheduled = true;
+            yoloStatus = 'queued';
+            updateEngineStatus();
+
+            const startLoad = () => {
+                yoloLoadScheduled = false;
+                yoloLoadPromise = loadYoloModel();
+            };
+
+            if ('requestIdleCallback' in window) {
+                requestIdleCallback(startLoad, { timeout: 1500 });
+            } else {
+                setTimeout(startLoad, 800);
+            }
+        }
 
         function parseYoloClassNames(metadataText) {
             const names = [];
@@ -903,6 +1026,12 @@
         
         async function loadYoloModel() {
             try {
+                if (typeof tf === 'undefined') {
+                    throw new Error('TensorFlow.js 尚未載入');
+                }
+                yoloStatus = 'loading';
+                updateEngineStatus();
+
                 // 嘗試載入 YOLO TFJS 模型
                 await tf.setBackend('webgl'); // 強制啟用 WebGL 顯示卡硬體加速
                 await tf.ready();
@@ -916,20 +1045,44 @@
                 }
 
                 yoloModel = await tf.loadGraphModel('./model_web/model.json');
+                yoloStatus = 'ready';
+                updateEngineStatus();
                 console.log("✅ YOLO 證件模型載入成功！");
+                return true;
             } catch (e) {
                 yoloModel = null;
+                yoloStatus = 'failed';
+                updateEngineStatus();
                 console.warn("⚠️ YOLO 證件模型不可用，將自動使用 OpenCV 傳統邊緣偵測作為備案。", e);
+                return false;
             }
         }
-        
+
+        function onTensorFlowReady() {
+            tfReady = true;
+            startYoloBackgroundLoad();
+        }
+
+        function onTensorFlowError() {
+            tfReady = false;
+            yoloStatus = 'failed';
+            updateEngineStatus();
+        }
+
         function onOpenCvReady() {
             cvReady = true;
-            loadYoloModel().then(() => {
-                document.getElementById('cvLoading').style.display = 'none';
-                document.getElementById('uploadCard').style.display = 'block';
-            });
+            updateEngineStatus();
+            updateProcessButtonState();
+            runPendingOpenCvAutoDetect();
         }
+
+        function onOpenCvError() {
+            cvReady = false;
+            setEngineStatus('影像引擎載入失敗，請重新整理頁面或確認網路連線。', 'warning');
+        }
+
+        updateEngineStatus();
+        if (tfReady) startYoloBackgroundLoad();
 
         // 更新滑桿數字顯示
         ['b', 'c', 's', 'sharp', 'denoise'].forEach(id => {
@@ -1007,17 +1160,29 @@
             points = [ {x: m, y: m}, {x: w-m, y: m}, {x: w-m, y: h-m}, {x: m, y: h-m} ];
             selectedIdx = 0; // 預設選取第一個點
             selectedEdgeIdx = -1;
+            allowDeferredAutoDetect = true;
+            pendingOpenCvAutoDetect = false;
             drawCanvas();
             updateFilterHint(); // 載入新圖時重置提示
             updateSourceQualityNotice();
             imageQualityIssues = analyzeImageQuality();
-            
-            // 優先嘗試純前端 YOLO 推論，若失敗或未載入則退回 OpenCV 邊緣偵測
-            let yoloSuccess = await runYoloInference();
-            if (!yoloSuccess) {
-                autoDetectCornersLocal();
+
+            // 優先使用已就緒的 YOLO；模型還在背景載入時，直接使用 OpenCV 或預設裁切框。
+            let autoDetected = false;
+            if (yoloModel) {
+                autoDetected = await runYoloInference();
             }
-            
+            if (!autoDetected) {
+                if (cvReady) {
+                    autoDetected = autoDetectCornersLocal();
+                    allowDeferredAutoDetect = false;
+                } else {
+                    pendingOpenCvAutoDetect = true;
+                    setEngineStatus('照片已載入；影像引擎仍在背景載入，完成後會自動嘗試抓取邊界。');
+                }
+            }
+            updateProcessButtonState();
+
             // 重置歷史紀錄，並儲存第一筆初始點位狀態
             pointsHistory = [];
             historyIndex = -1;
@@ -1488,7 +1653,7 @@
 
         // 呼叫 OpenCV.js 在本機端自動抓 4 個角
         function autoDetectCornersLocal() {
-            if (!cvReady) return;
+            if (!cvReady) return false;
             try {
                 let src = cv.imread(imageObj);
                 let ratio = src.rows / 500.0;
@@ -1553,7 +1718,11 @@
                     selectedIdx = 0; drawCanvas();
                     selectedEdgeIdx = -1;
                 }
-            } catch (err) { console.error("AI 偵測失敗", err); }
+                return found;
+            } catch (err) {
+                console.error("AI 偵測失敗", err);
+                return false;
+            }
         }
 
         // 繪製 Canvas
@@ -1919,6 +2088,8 @@
 
             if (activePointers.size === 0) {
                 if (isDragging) { // 檢查是否有發生拖曳
+                    allowDeferredAutoDetect = false;
+                    pendingOpenCvAutoDetect = false;
                     if (draggingIdx !== -1) {
                         // 吸附被拖曳的單一角點
                         snapPoint(draggingIdx);
@@ -1952,11 +2123,15 @@
         const nudgePoint = (dx, dy) => {
             const step = parseInt(document.getElementById('nudgeStep').value, 10);
             if (selectedIdx !== -1) {
+                allowDeferredAutoDetect = false;
+                pendingOpenCvAutoDetect = false;
                 points[selectedIdx].x += dx * step;
                 points[selectedIdx].y += dy * step;
                 drawCanvas();
                 savePointsState(); // 每次方向鍵微調後儲存
             } else if (selectedEdgeIdx !== -1) {
+                allowDeferredAutoDetect = false;
+                pendingOpenCvAutoDetect = false;
                 points[selectedEdgeIdx].x += dx * step;
                 points[selectedEdgeIdx].y += dy * step;
                 points[(selectedEdgeIdx + 1) % 4].x += dx * step;
@@ -1974,7 +2149,11 @@
         // 5. 核心影像處理管線 (OpenCV.js)
         // ==========================================
         processBtn.addEventListener('click', async () => {
-            if (!cvReady) return;
+            if (!cvReady) {
+                setEngineStatus('影像引擎仍在背景載入，請稍候幾秒再裁切。');
+                updateProcessButtonState();
+                return;
+            }
             loading.style.display = 'block'; processBtn.disabled = true;
             
             // 稍微延遲以確保瀏覽器有空檔渲染 Loading UI
@@ -2132,7 +2311,7 @@
                 src.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
                 base_enhanced.delete(); temp_img.delete(); final_result.delete();
                 
-                loading.style.display = 'none'; processBtn.disabled = false;
+                loading.style.display = 'none'; processBtn.disabled = false; processBtn.textContent = '✂️ 裁切圖片';
                 document.getElementById('editorCard').style.display = 'none';
                 floatingControls.classList.remove('visible');
                 document.body.classList.remove('controls-visible');
@@ -2144,7 +2323,7 @@
             } catch(err) {
                 console.error("OpenCV Processing Error:", err);
                 alert("處理圖片時發生錯誤！");
-                loading.style.display = 'none'; processBtn.disabled = false;
+                loading.style.display = 'none'; processBtn.disabled = false; processBtn.textContent = '✂️ 裁切圖片';
             }
         });
 
@@ -2447,8 +2626,8 @@
     </script>
 
     <!-- 引入外部套件 (移至底部以解決 Service Worker 快取導致的載入順序問題) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs" onload="onTensorFlowReady()" onerror="onTensorFlowError()"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()" onerror="onOpenCvError()"></script>
 </body>
 </html>
