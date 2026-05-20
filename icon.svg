@@ -1,68 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="160" y1="180" x2="870" y2="850" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1F7CFF"/>
-      <stop offset="0.52" stop-color="#1CC7D8"/>
-      <stop offset="1" stop-color="#31D27C"/>
+    <linearGradient id="bg" x1="120" y1="80" x2="900" y2="920" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#020617"/>
+      <stop offset="0.5" stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#111827"/>
     </linearGradient>
-    <linearGradient id="photo" x1="300" y1="335" x2="720" y2="690" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0D56C8"/>
-      <stop offset="1" stop-color="#08306F"/>
+
+    <linearGradient id="neon" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#00F5FF"/>
+      <stop offset="1" stop-color="#7C3AED"/>
     </linearGradient>
-    <linearGradient id="scan" x1="210" y1="0" x2="790" y2="0" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#7DF9FF" stop-opacity="0"/>
-      <stop offset="0.44" stop-color="#7DF9FF" stop-opacity="0.95"/>
-      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="1"/>
-      <stop offset="1" stop-color="#7DF9FF" stop-opacity="0"/>
+
+    <linearGradient id="scan" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#00F5FF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#00F5FF" stop-opacity="0"/>
     </linearGradient>
-    <filter id="softShadow" x="160" y="170" width="704" height="704" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="30" stdDeviation="35" flood-color="#002E55" flood-opacity="0.35"/>
-    </filter>
-    <filter id="glow" x="130" y="430" width="760" height="120" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+
+    <filter id="glow">
       <feGaussianBlur stdDeviation="12" result="blur"/>
       <feMerge>
         <feMergeNode in="blur"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
+
+    <filter id="softGlow">
+      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#22D3EE" flood-opacity="0.5"/>
+    </filter>
   </defs>
 
-  <!-- App rounded square -->
-  <rect x="112" y="112" width="800" height="800" rx="190" fill="url(#bg)"/>
-  <path d="M220 820L820 220V730C820 779.706 779.706 820 730 820H220Z" fill="#05244C" opacity="0.16"/>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="240" fill="url(#bg)"/>
 
-  <!-- Main artwork group -->
-  <g filter="url(#softShadow)">
-    <!-- Scanner/crop outer frame -->
-    <rect x="238" y="250" width="548" height="548" rx="42" fill="#06396F" opacity="0.28"/>
-    <path d="M260 352V292C260 274.327 274.327 260 292 260H352" stroke="#B7F7FF" stroke-width="34" stroke-linecap="round" opacity="0.55"/>
-    <path d="M672 260H732C749.673 260 764 274.327 764 292V352" stroke="#B7F7FF" stroke-width="34" stroke-linecap="round" opacity="0.55"/>
-    <path d="M764 672V732C764 749.673 749.673 764 732 764H672" stroke="#B7F7FF" stroke-width="34" stroke-linecap="round" opacity="0.55"/>
-    <path d="M352 764H292C274.327 764 260 749.673 260 732V672" stroke="#B7F7FF" stroke-width="34" stroke-linecap="round" opacity="0.55"/>
-
-    <!-- Dotted scan top line -->
-    <path d="M318 318H706" stroke="#BFFBFF" stroke-width="10" stroke-linecap="round" stroke-dasharray="12 28" opacity="0.45"/>
-
-    <!-- Photo card -->
-    <rect x="312" y="345" width="420" height="340" rx="28" fill="url(#photo)" stroke="#A8F9FF" stroke-opacity="0.42" stroke-width="8"/>
-    <circle cx="392" cy="422" r="38" fill="#5DDCFF" opacity="0.38"/>
-    <path d="M320 610L402 528C414.497 515.503 434.503 515.503 447 528L506 587L557 536C569.497 523.503 589.503 523.503 602 536L724 658H348C332.536 658 320 645.464 320 630V610Z" fill="#7DF9FF" opacity="0.70"/>
-    <path d="M320 646C390 610 462 630 535 608C612 585 676 604 724 625V658H348C332.536 658 320 645.464 320 630V646Z" fill="#FFFFFF" opacity="0.26"/>
-
-    <!-- Crop symbol overlay -->
-    <path d="M618 388V574C618 596.091 635.909 614 658 614H820" stroke="#D8FFFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" opacity="0.88"/>
-    <path d="M535 617H708C730.091 617 748 634.909 748 657V810" stroke="#D8FFFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" opacity="0.88"/>
-    <path d="M610 472H824" stroke="#D8FFFF" stroke-width="34" stroke-linecap="round" opacity="0.88"/>
-    <path d="M748 473V687" stroke="#D8FFFF" stroke-width="34" stroke-linecap="round" opacity="0.88"/>
-
-    <!-- Diagonal crop blade accents -->
-    <path d="M535 617L690 462" stroke="#05244C" stroke-width="17" stroke-linecap="round" opacity="0.55"/>
-    <path d="M710 442L748 404" stroke="#D8FFFF" stroke-width="14" stroke-linecap="round" opacity="0.72"/>
-
-    <!-- Scan beam -->
-    <g filter="url(#glow)">
-      <rect x="190" y="494" width="650" height="8" rx="4" fill="url(#scan)"/>
-      <rect x="250" y="486" width="250" height="24" rx="12" fill="#7DF9FF" opacity="0.18"/>
-    </g>
+  <!-- Outer scanning frame -->
+  <g stroke="url(#neon)" stroke-width="18" stroke-linecap="round" filter="url(#glow)">
+    <path d="M240 360V240H360"/>
+    <path d="M664 240H784V360"/>
+    <path d="M240 664V784H360"/>
+    <path d="M664 784H784V664"/>
   </g>
+
+  <!-- Central holographic card -->
+  <g filter="url(#softGlow)">
+    <rect x="280" y="280" width="464" height="464" rx="40"
+          fill="#0B1120"
+          stroke="url(#neon)"
+          stroke-width="10"/>
+  </g>
+
+  <!-- AI image area -->
+  <rect x="340" y="340" width="344" height="344" rx="24"
+        fill="#111827"
+        stroke="#334155"
+        stroke-width="4"/>
+
+  <!-- Landscape -->
+  <circle cx="590" cy="420" r="34" fill="#22D3EE" opacity="0.85"/>
+
+  <path d="M360 620L455 500L535 580L615 460L664 520V664H360V620Z"
+        fill="url(#neon)"
+        opacity="0.9"/>
+
+  <!-- Scan line -->
+  <rect x="320" y="505" width="384" height="12" rx="6"
+        fill="url(#scan)"
+        filter="url(#glow)"/>
+
+  <!-- Precision crop icon -->
+  <g stroke="#67E8F9" stroke-width="16" stroke-linecap="round" filter="url(#glow)">
+    <path d="M690 470V640"/>
+    <path d="M610 550H780"/>
+  </g>
+
+  <!-- Futuristic dots -->
+  <circle cx="300" cy="220" r="6" fill="#22D3EE"/>
+  <circle cx="740" cy="220" r="6" fill="#7C3AED"/>
+  <circle cx="220" cy="740" r="6" fill="#22D3EE"/>
+  <circle cx="804" cy="740" r="6" fill="#7C3AED"/>
+
 </svg>
