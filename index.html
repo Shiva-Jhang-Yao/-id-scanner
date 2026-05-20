@@ -285,12 +285,28 @@
         .action-toolbar::-webkit-scrollbar {
             display: none; /* Chrome/Safari/Opera */
         }
+
+        /* 載入動畫 (Spinner) */
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 123, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #007bff;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 12px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body ontouchstart=""> <!-- 加上 ontouchstart 讓 iOS Safari 能完美觸發 button:active 點擊特效 -->
 
-    <div id="cvLoading" style="text-align: center; margin: 20px; font-weight: bold; color: #007bff;">
-        ⚙️ 正在載入本機端 AI 與影像引擎，請稍候...
+    <div id="cvLoading" style="text-align: center; margin: 40px 20px; font-weight: bold; color: #007bff;">
+        <div class="spinner"></div>
+        <div>⚙️ 正在載入本機端 AI 與影像引擎，請稍候...</div>
     </div>
 
     <!-- 多頁文件購物車提示 -->
@@ -499,7 +515,7 @@
 
     <!-- 版本號顯示 -->
     <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: var(--border-dark); z-index: 9999; pointer-events: none; font-family: monospace;">
-        v2.0.4
+        v2.0.5
     </div>
 
     <script>
