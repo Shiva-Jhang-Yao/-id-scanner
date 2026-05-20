@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+
+# Local HTTPS certificates
+cert.pem
+key.pem
+
+# Training data, checkpoints, and generated evaluation artifacts
+id_dataset/
+input_images/
+output_images/
+output_images - 複製/
+runs/
+*.pt
+*.onnx
+*.npy
+
+# Local patch/export scratch files
+*.diff
+*.patch
+
+# Duplicate packaged model artifact; deploy model_web/ directly instead.
+model_web.zip

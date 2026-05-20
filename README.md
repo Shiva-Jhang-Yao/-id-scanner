@@ -2,11 +2,9 @@
 
 這是一個基於純前端技術、AI 驅動的證件掃描 Web App。它利用您手機的瀏覽器，在 **100% 離線** 的單機環境下，提供媲美原生 App 的證件裁切、影像優化與格式轉換功能。
 
-**線上體驗 Demo:** [https://your-github-username.github.io/your-repo-name/](https://your-github-username.github.io/your-repo-name/)
-*(請將上方網址替換為您自己的 GitHub Pages 網址)*
+**線上體驗 Demo:** [https://shiva-jhang-yao.github.io/-id-scanner/](https://shiva-jhang-yao.github.io/-id-scanner/)
 
-![操作展示](https://i.imgur.com/your-demo-gif.gif)
-*(提示：您可以用手機螢幕錄影，將操作過程轉成 GIF 後上傳到 imgur，再替換上方連結)*
+操作展示 GIF 可在錄製完成後再補上。
 
 ---
 

@@ -499,7 +499,7 @@
 
     <!-- 版本號顯示 -->
     <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: var(--border-dark); z-index: 9999; pointer-events: none; font-family: monospace;">
-        v2.0.3
+        v2.0.4
     </div>
 
     <script>
@@ -1509,19 +1509,23 @@
                 for (let i = 0; i < Math.min(5, sortableContours.length); ++i) {
                     let cnt = sortableContours[i].cnt;
                     let peri = cv.arcLength(cnt, true);
-                    let approx = new cv.Mat();
                     for(let eps of [0.01, 0.02, 0.03, 0.04, 0.05]) {
-                        cv.approxPolyDP(cnt, approx, eps * peri, true);
-                        if (approx.rows === 4) {
-                            points = [
-                                {x: approx.data32S[0] * ratio, y: approx.data32S[1] * ratio},
-                                {x: approx.data32S[2] * ratio, y: approx.data32S[3] * ratio},
-                                {x: approx.data32S[4] * ratio, y: approx.data32S[5] * ratio},
-                                {x: approx.data32S[6] * ratio, y: approx.data32S[7] * ratio}
-                            ];
-                            found = true; approx.delete(); break;
+                        let approx = new cv.Mat();
+                        try {
+                            cv.approxPolyDP(cnt, approx, eps * peri, true);
+                            if (approx.rows === 4) {
+                                points = [
+                                    {x: approx.data32S[0] * ratio, y: approx.data32S[1] * ratio},
+                                    {x: approx.data32S[2] * ratio, y: approx.data32S[3] * ratio},
+                                    {x: approx.data32S[4] * ratio, y: approx.data32S[5] * ratio},
+                                    {x: approx.data32S[6] * ratio, y: approx.data32S[7] * ratio}
+                                ];
+                                found = true;
+                                break;
+                            }
+                        } finally {
+                            approx.delete();
                         }
-                        approx.delete();
                     }
                     if (found) break;
                 }
