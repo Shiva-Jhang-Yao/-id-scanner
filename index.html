@@ -8,7 +8,8 @@
     <!-- PWA 標籤 -->
     <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#007bff">
-    <link rel="apple-touch-icon" href="./icon.svg">
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png">
     
     <style>
         /* 定義深色與淺色模式的 CSS 變數 */
@@ -561,7 +562,7 @@
 
     <!-- 版本號顯示 -->
     <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: var(--border-dark); z-index: 9999; pointer-events: none; font-family: monospace;">
-        v2.0.6
+        v2.0.7
     </div>
 
     <script>
@@ -932,6 +933,18 @@
         let engineStatusHideTimer = null;
         let pendingOpenCvAutoDetect = false;
         let allowDeferredAutoDetect = false;
+
+        function disposeCvResources(...resources) {
+            resources.forEach(resource => {
+                if (!resource || typeof resource.delete !== 'function') return;
+                try {
+                    if (typeof resource.isDeleted === 'function' && resource.isDeleted()) return;
+                    resource.delete();
+                } catch (err) {
+                    console.warn('OpenCV 資源釋放失敗', err);
+                }
+            });
+        }
 
         function setEngineStatus(message, state = 'loading') {
             if (!engineStatus || !engineStatusText) return;
@@ -1487,7 +1500,7 @@
                     }
                 }
             } finally {
-                approx.delete();
+                disposeCvResources(approx);
             }
 
             const extreme = [];
@@ -1574,11 +1587,7 @@
                 console.warn('YOLO mask 後處理失敗，改用外框。', err);
                 return null;
             } finally {
-                if (bestContour) bestContour.delete();
-                if (kernel) kernel.delete();
-                if (mask) mask.delete();
-                if (contours) contours.delete();
-                if (hierarchy) hierarchy.delete();
+                disposeCvResources(bestContour, kernel, mask, contours, hierarchy);
             }
         }
 
@@ -1654,30 +1663,39 @@
         // 呼叫 OpenCV.js 在本機端自動抓 4 個角
         function autoDetectCornersLocal() {
             if (!cvReady) return false;
+            let src = null;
+            let resized = null;
+            let gray = null;
+            let blur = null;
+            let edged = null;
+            let morphKernel = null;
+            let contours = null;
+            let hierarchy = null;
+            const sortableContours = [];
+
             try {
-                let src = cv.imread(imageObj);
+                src = cv.imread(imageObj);
                 let ratio = src.rows / 500.0;
                 if (ratio < 1.0) ratio = 1.0;
                 let dsize = new cv.Size(Math.round(src.cols / ratio), 500);
-                let resized = new cv.Mat();
+                resized = new cv.Mat();
                 cv.resize(src, resized, dsize, 0, 0, cv.INTER_AREA);
 
-                let gray = new cv.Mat();
+                gray = new cv.Mat();
                 cv.cvtColor(resized, gray, cv.COLOR_RGBA2GRAY, 0);
-                let blur = new cv.Mat();
+                blur = new cv.Mat();
                 cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
 
-                let edged = new cv.Mat();
+                edged = new cv.Mat();
                 cv.Canny(blur, edged, 50, 150);
 
-                let M_morph = cv.Mat.ones(5, 5, cv.CV_8U);
-                cv.morphologyEx(edged, edged, cv.MORPH_CLOSE, M_morph, new cv.Point(-1, -1), 2);
+                morphKernel = cv.Mat.ones(5, 5, cv.CV_8U);
+                cv.morphologyEx(edged, edged, cv.MORPH_CLOSE, morphKernel, new cv.Point(-1, -1), 2);
 
-                let contours = new cv.MatVector();
-                let hierarchy = new cv.Mat();
+                contours = new cv.MatVector();
+                hierarchy = new cv.Mat();
                 cv.findContours(edged, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
-                let sortableContours = [];
                 for (let i = 0; i < contours.size(); ++i) {
                     let cnt = contours.get(i);
                     let area = cv.contourArea(cnt);
@@ -1711,9 +1729,6 @@
                     if (found) break;
                 }
 
-                src.delete(); resized.delete(); gray.delete(); blur.delete(); edged.delete(); M_morph.delete(); contours.delete(); hierarchy.delete();
-                for(let item of sortableContours) { if(!item.cnt.isDeleted()) item.cnt.delete(); }
-
                 if (found) {
                     selectedIdx = 0; drawCanvas();
                     selectedEdgeIdx = -1;
@@ -1722,6 +1737,9 @@
             } catch (err) {
                 console.error("AI 偵測失敗", err);
                 return false;
+            } finally {
+                sortableContours.forEach(item => disposeCvResources(item.cnt));
+                disposeCvResources(src, resized, gray, blur, edged, morphKernel, contours, hierarchy);
             }
         }
 
@@ -1935,19 +1953,24 @@
             offCanvas.width = cropR * 2;
             offCanvas.height = cropR * 2;
             const offCtx = offCanvas.getContext('2d');
-            
+
             // 從原圖擷取該點附近的局部區域 (drawImage 會自動處理超出邊界的黑邊)
             offCtx.drawImage(imageObj, pt.x - cropR, pt.y - cropR, cropR * 2, cropR * 2, 0, 0, cropR * 2, cropR * 2);
-            
+
+            let src = null;
+            let gray = null;
+            let blur = null;
+            let corners = null;
+            let mask = null;
             try {
-                let src = cv.imread('offscreenCanvas');
-                let gray = new cv.Mat();
+                src = cv.imread('offscreenCanvas');
+                gray = new cv.Mat();
                 cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-                let blur = new cv.Mat();
+                blur = new cv.Mat();
                 cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
-                
-                let corners = new cv.Mat();
-                let mask = new cv.Mat();
+
+                corners = new cv.Mat();
+                mask = new cv.Mat();
                 // 增加候選點數量 (10) 並根據力道調整品質閾值
                 cv.goodFeaturesToTrack(blur, corners, 10, currentStrength.quality, 5, mask, 15);
                 
@@ -1963,8 +1986,11 @@
                     points[idx].y += (bestY - cy);
                     drawCanvas();
                 }
-                src.delete(); gray.delete(); blur.delete(); corners.delete(); mask.delete();
-            } catch (e) { console.error("自動吸附失敗", e); }
+            } catch (e) {
+                console.error("自動吸附失敗", e);
+            } finally {
+                disposeCvResources(src, gray, blur, corners, mask);
+            }
         }
 
         // ==========================================
@@ -2158,9 +2184,23 @@
             
             // 稍微延遲以確保瀏覽器有空檔渲染 Loading UI
             await new Promise(resolve => setTimeout(resolve, 50));
-            
+
+            let src = null;
+            let srcTri = null;
+            let dstTri = null;
+            let perspectiveTransform = null;
+            let warped = null;
+            let baseEnhanced = null;
+            let maxSharpened = null;
+            let sharpenKernel = null;
+            let tempImg = null;
+            let hsv = null;
+            let channels = null;
+            let saturationChannel = null;
+            let finalResult = null;
+            let grayMat = null;
             try {
-                let src = cv.imread(imageObj);
+                src = cv.imread(imageObj);
                 
                 // --------------------------------------------------
                 // 步驟 1：順時針排序 4 個點並確保最長邊為頂部
@@ -2192,7 +2232,7 @@
                 let br = sortedPoints[2];
                 let bl = sortedPoints[3];
                 
-                let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
+                srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
                 
                 // 計算兩側寬度與高度，取最大值作為校正後的基準解析度
                 let wA = Math.hypot(br.x - bl.x, br.y - bl.y);
@@ -2224,11 +2264,11 @@
                 // --------------------------------------------------
                 // 步驟 2：執行透視變換 (Perspective Transform)
                 // --------------------------------------------------
-                let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, finalW - 1, 0, finalW - 1, finalH - 1, 0, finalH - 1]);
-                let M = cv.getPerspectiveTransform(srcTri, dstTri);
-                
-                let warped = new cv.Mat();
-                cv.warpPerspective(src, warped, M, new cv.Size(finalW, finalH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+                dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, finalW - 1, 0, finalW - 1, finalH - 1, 0, finalH - 1]);
+                perspectiveTransform = cv.getPerspectiveTransform(srcTri, dstTri);
+
+                warped = new cv.Mat();
+                cv.warpPerspective(src, warped, perspectiveTransform, new cv.Size(finalW, finalH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
                 
                 // --------------------------------------------------
                 // 步驟 3：影像降噪 (Median Blur)
@@ -2250,39 +2290,37 @@
                 // --------------------------------------------------
                 // 步驟 4：銳化處理 (Unsharp Masking 概念)
                 // --------------------------------------------------
-                let base_enhanced = warped.clone();
+                baseEnhanced = warped.clone();
                 if (sharp > 0) {
-                    let max_sharpened = new cv.Mat();
-                    let kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
-                    cv.filter2D(warped, max_sharpened, -1, kernel);
-                    cv.addWeighted(max_sharpened, sharp, warped, 1.0 - sharp, 0, base_enhanced);
-                    max_sharpened.delete(); kernel.delete();
+                    maxSharpened = new cv.Mat();
+                    sharpenKernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
+                    cv.filter2D(warped, maxSharpened, -1, sharpenKernel);
+                    cv.addWeighted(maxSharpened, sharp, warped, 1.0 - sharp, 0, baseEnhanced);
                 }
                 
                 // --------------------------------------------------
                 // 步驟 5：飽顛度調整 (HSV 色彩空間轉換)
                 // --------------------------------------------------
-                let temp_img = base_enhanced.clone();
+                tempImg = baseEnhanced.clone();
                 if (s !== 1.0) {
-                    let hsv = new cv.Mat();
-                    cv.cvtColor(base_enhanced, hsv, cv.COLOR_RGBA2RGB); // 先確保轉為 RGB
+                    hsv = new cv.Mat();
+                    cv.cvtColor(baseEnhanced, hsv, cv.COLOR_RGBA2RGB); // 先確保轉為 RGB
                     cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
-                    let channels = new cv.MatVector();
+                    channels = new cv.MatVector();
                     cv.split(hsv, channels);
-                    let sat = channels.get(1);
-                    sat.convertTo(sat, -1, s, 0);
-                    channels.set(1, sat);
+                    saturationChannel = channels.get(1);
+                    saturationChannel.convertTo(saturationChannel, -1, s, 0);
+                    channels.set(1, saturationChannel);
                     cv.merge(channels, hsv);
-                    cv.cvtColor(hsv, temp_img, cv.COLOR_HSV2RGB);
-                    cv.cvtColor(temp_img, temp_img, cv.COLOR_RGB2RGBA);
-                    hsv.delete(); channels.delete(); sat.delete();
+                    cv.cvtColor(hsv, tempImg, cv.COLOR_HSV2RGB);
+                    cv.cvtColor(tempImg, tempImg, cv.COLOR_RGB2RGBA);
                 }
                 
                 // --------------------------------------------------
                 // 步驟 6：亮度與對比度調整 (Linear Transform)
                 // --------------------------------------------------
-                let final_result = new cv.Mat();
-                temp_img.convertTo(final_result, -1, c, b);
+                finalResult = new cv.Mat();
+                tempImg.convertTo(finalResult, -1, c, b);
                 
                 // --------------------------------------------------
                 // 步驟 7：黑白化與自適應二值化 (Adaptive Thresholding)
@@ -2290,28 +2328,23 @@
                 const isGrayscale = document.getElementById('chkGrayscale').checked;
                 const isBinarize = document.getElementById('chkBinarize').checked;
                 if (isGrayscale || isBinarize) {
-                    let grayMat = new cv.Mat();
-                    cv.cvtColor(final_result, grayMat, cv.COLOR_RGBA2GRAY, 0);
+                    grayMat = new cv.Mat();
+                    cv.cvtColor(finalResult, grayMat, cv.COLOR_RGBA2GRAY, 0);
                     if (isBinarize) {
                         // 升級為「自適應二值化」，能完美處理陰影與光線不均的問題
                         cv.adaptiveThreshold(grayMat, grayMat, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 15, 4);
                     }
-                    cv.cvtColor(grayMat, final_result, cv.COLOR_GRAY2RGBA, 0);
-                    grayMat.delete();
+                    cv.cvtColor(grayMat, finalResult, cv.COLOR_GRAY2RGBA, 0);
                 }
                 
                 // --------------------------------------------------
                 // 步驟 8：輸出結果至畫布與清理記憶體
                 // --------------------------------------------------
-                cv.imshow('offscreenCanvas', final_result);
+                cv.imshow('offscreenCanvas', finalResult);
                 document.getElementById('resultImage').src = document.getElementById('offscreenCanvas').toDataURL('image/jpeg', 0.95);
                 document.getElementById('resultSize').textContent = ''; // 清空舊的檔案大小
                 document.getElementById('resultResolution').textContent = `📐 圖片尺寸：${finalW} x ${finalH} 像素`;
-                
-                src.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
-                base_enhanced.delete(); temp_img.delete(); final_result.delete();
-                
-                loading.style.display = 'none'; processBtn.disabled = false; processBtn.textContent = '✂️ 裁切圖片';
+
                 document.getElementById('editorCard').style.display = 'none';
                 floatingControls.classList.remove('visible');
                 document.body.classList.remove('controls-visible');
@@ -2323,6 +2356,12 @@
             } catch(err) {
                 console.error("OpenCV Processing Error:", err);
                 alert("處理圖片時發生錯誤！");
+            } finally {
+                disposeCvResources(
+                    src, srcTri, dstTri, perspectiveTransform, warped, baseEnhanced,
+                    maxSharpened, sharpenKernel, tempImg, hsv, channels, saturationChannel,
+                    finalResult, grayMat
+                );
                 loading.style.display = 'none'; processBtn.disabled = false; processBtn.textContent = '✂️ 裁切圖片';
             }
         });
@@ -2339,6 +2378,24 @@
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        function getJsPdfConstructor() {
+            const jsPDF = window.jspdf?.jsPDF;
+            if (!jsPDF) {
+                alert('PDF 套件尚未載入完成，請稍候再試一次。');
+                return null;
+            }
+            return jsPDF;
+        }
+
+        function loadImageFromDataUrl(dataUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('圖片載入失敗'));
+                img.src = dataUrl;
+            });
         }
 
         // 處理下載圖片邏輯
@@ -2412,39 +2469,41 @@
         btnGenerateMultiPdf.addEventListener('click', async () => {
             if (pdfPages.length === 0) return;
             
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-            const A4_WIDTH = 210, A4_HEIGHT = 297, MARGIN = 10;
+            const jsPDF = getJsPdfConstructor();
+            if (!jsPDF) return;
             
             btnGenerateMultiPdf.disabled = true;
             btnGenerateMultiPdf.textContent = '⏳ 處理中...';
 
             // 依序將陣列中的圖片畫入 PDF 中
-            for (let i = 0; i < pdfPages.length; i++) {
-                await new Promise((resolve) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        if (i > 0) pdf.addPage(); // 第一頁不需要 addPage
-                        const imgRatio = img.width / img.height;
-                        let imgWidth = A4_WIDTH - MARGIN * 2;
-                        let imgHeight = imgWidth / imgRatio;
+            try {
+                const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+                const A4_WIDTH = 210, A4_HEIGHT = 297, MARGIN = 10;
+
+                for (let i = 0; i < pdfPages.length; i++) {
+                    const img = await loadImageFromDataUrl(pdfPages[i]);
+                    if (i > 0) pdf.addPage(); // 第一頁不需要 addPage
+                    const imgRatio = img.width / img.height;
+                    let imgWidth = A4_WIDTH - MARGIN * 2;
+                    let imgHeight = imgWidth / imgRatio;
                         
                         // 若圖片過長，限制其高度並等比縮小寬度，然後置中
-                        if (imgHeight > A4_HEIGHT - MARGIN * 2) {
-                            imgHeight = A4_HEIGHT - MARGIN * 2;
-                            imgWidth = imgHeight * imgRatio;
-                        }
-                        const x = (A4_WIDTH - imgWidth) / 2;
-                        pdf.addImage(img, 'JPEG', x, MARGIN, imgWidth, imgHeight);
-                        resolve();
-                    };
-                    img.src = pdfPages[i];
-                });
-            }
+                    if (imgHeight > A4_HEIGHT - MARGIN * 2) {
+                        imgHeight = A4_HEIGHT - MARGIN * 2;
+                        imgWidth = imgHeight * imgRatio;
+                    }
+                    const x = (A4_WIDTH - imgWidth) / 2;
+                    pdf.addImage(img, 'JPEG', x, MARGIN, imgWidth, imgHeight);
+                }
             
-            pdf.save('multi_page_scan.pdf');
-            btnGenerateMultiPdf.disabled = false;
-            btnGenerateMultiPdf.textContent = '📥 匯出 PDF';
+                pdf.save('multi_page_scan.pdf');
+            } catch (err) {
+                console.error('多頁 PDF 匯出失敗', err);
+                alert('匯出 PDF 時發生錯誤，請稍後再試。');
+            } finally {
+                btnGenerateMultiPdf.disabled = false;
+                btnGenerateMultiPdf.textContent = '📥 匯出 PDF';
+            }
         });
 
         // 處理多頁文件預覽與刪除邏輯
@@ -2566,13 +2625,14 @@
         });
 
         // 處理單張下載 PDF 邏輯
-        downloadPdfBtn.addEventListener('click', () => {
-            const { jsPDF } = window.jspdf;
+        downloadPdfBtn.addEventListener('click', async () => {
+            const jsPDF = getJsPdfConstructor();
+            if (!jsPDF) return;
             const imgData = document.getElementById('resultImage').src;
             if (!imgData || !imgData.startsWith('data:image')) return;
 
-            const img = new Image();
-            img.onload = () => {
+            try {
+                const img = await loadImageFromDataUrl(imgData);
                 const pdf = new jsPDF({
                     orientation: 'p', // portrait (直向)
                     unit: 'mm',
@@ -2595,8 +2655,10 @@
                 const x = (A4_WIDTH - imgWidth) / 2;
                 pdf.addImage(img, 'JPEG', x, MARGIN, imgWidth, imgHeight);
                 pdf.save('id_card_scan.pdf');
-            };
-            img.src = imgData;
+            } catch (err) {
+                console.error('PDF 匯出失敗', err);
+                alert('匯出 PDF 時發生錯誤，請稍後再試。');
+            }
         });
 
         // 處理重新調整邏輯
