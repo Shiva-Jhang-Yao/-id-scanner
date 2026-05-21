@@ -1,4 +1,4 @@
-const CACHE_NAME = 'id-scanner-v2.0.7'; // 更新版本號以觸發 PWA 強制更新
+const CACHE_NAME = 'id-scanner-v2.0.8'; // 更新版本號以觸發 PWA 強制更新
 const urlsToCache = [
     './',
     './index.html',

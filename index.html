@@ -335,6 +335,75 @@
         .engine-status.warning .spinner {
             display: none;
         }
+        .task-status {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            margin: 14px 0;
+            padding: 12px;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            background: var(--hint-bg);
+            color: var(--text-main);
+            text-align: left;
+        }
+        .task-status.is-visible {
+            display: flex;
+        }
+        .task-status.done {
+            border-color: #81c784;
+            background: #e8f5e9;
+            color: #1b5e20;
+        }
+        .task-status .spinner {
+            width: 28px;
+            height: 28px;
+            border-width: 3px;
+            margin: 0;
+            flex-shrink: 0;
+        }
+        .task-status.done .spinner,
+        .task-status.done .task-progress {
+            display: none;
+        }
+        .task-status-copy {
+            min-width: 0;
+            flex: 1;
+        }
+        .task-status-title {
+            display: block;
+            font-size: 0.92rem;
+            font-weight: 800;
+            line-height: 1.35;
+        }
+        .task-status-message {
+            display: block;
+            margin-top: 2px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+        .task-progress {
+            position: relative;
+            height: 4px;
+            margin-top: 9px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(0, 123, 255, 0.16);
+        }
+        .task-progress::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 45%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, rgba(0, 123, 255, 0), #007bff, rgba(0, 123, 255, 0));
+            animation: task-progress-slide 1.15s ease-in-out infinite;
+        }
+        @keyframes task-progress-slide {
+            0% { transform: translateX(-110%); }
+            100% { transform: translateX(250%); }
+        }
         @media (prefers-color-scheme: dark) {
             .engine-status.ready {
                 color: #a5d6a7;
@@ -345,6 +414,11 @@
                 color: #ffd866;
                 border-color: #8a6d00;
                 background: #332900;
+            }
+            .task-status.done {
+                color: #a5d6a7;
+                border-color: #2e7d32;
+                background: #0f2a16;
             }
         }
     </style>
@@ -384,6 +458,15 @@
         <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
         <input type="file" id="galleryInput" accept="image/*" style="display: none;">
 
+        <div id="imagePrepStatus" class="task-status" role="status" aria-live="polite" aria-hidden="true">
+            <div class="spinner"></div>
+            <div class="task-status-copy">
+                <strong id="imagePrepTitle" class="task-status-title">正在準備圖片</strong>
+                <span id="imagePrepMessage" class="task-status-message">請稍候，正在讀取照片。</span>
+                <div class="task-progress"></div>
+            </div>
+        </div>
+
         <!-- 教學動畫與步驟指引 -->
         <div style="margin-top: 25px; padding: 20px 10px; background: var(--hint-bg); border-radius: 12px; text-align: center; border: 1px dashed var(--border-dark);">
             <!-- 純 CSS 繪製的文件與掃描光條 -->
@@ -415,6 +498,14 @@
                     <button id="openFiltersBtn" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #17a2b8; margin: 0;">🎛️ 濾鏡</button>
                 </div>
                 <button id="btnRotate" style="width: auto; padding: 6px 10px; font-size: 0.85rem; background-color: #6c757d; margin: 0;">🔃 旋轉</button>
+            </div>
+        </div>
+        <div id="imageAnalysisStatus" class="task-status" role="status" aria-live="polite" aria-hidden="true">
+            <div class="spinner"></div>
+            <div class="task-status-copy">
+                <strong id="imageAnalysisTitle" class="task-status-title">正在分析圖片</strong>
+                <span id="imageAnalysisMessage" class="task-status-message">正在自動抓取文件邊界。</span>
+                <div class="task-progress"></div>
             </div>
         </div>
         <div class="canvas-container">
@@ -562,7 +653,7 @@
 
     <!-- 版本號顯示 -->
     <div style="position: fixed; bottom: 8px; right: 12px; font-size: 0.7rem; color: var(--border-dark); z-index: 9999; pointer-events: none; font-family: monospace;">
-        v2.0.7
+        v2.0.8
     </div>
 
     <script>
@@ -571,11 +662,19 @@
         // ==========================================
         const cameraInput = document.getElementById('cameraInput');
         const galleryInput = document.getElementById('galleryInput');
+        const uploadCard = document.getElementById('uploadCard');
+        const editorCard = document.getElementById('editorCard');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const processBtn = document.getElementById('processBtn');
         const resetBtn = document.getElementById('resetBtn');
         const loading = document.getElementById('loading');
+        const imagePrepStatus = document.getElementById('imagePrepStatus');
+        const imagePrepTitle = document.getElementById('imagePrepTitle');
+        const imagePrepMessage = document.getElementById('imagePrepMessage');
+        const imageAnalysisStatus = document.getElementById('imageAnalysisStatus');
+        const imageAnalysisTitle = document.getElementById('imageAnalysisTitle');
+        const imageAnalysisMessage = document.getElementById('imageAnalysisMessage');
         const engineStatus = document.getElementById('cvLoading');
         const engineStatusText = document.getElementById('engineStatusText');
         const downloadJpgBtn = document.getElementById('downloadJpgBtn');
@@ -600,6 +699,7 @@
         const btnRetake = document.getElementById('btnRetake');
         const btnUndo = document.getElementById('btnUndo');
         const btnRedo = document.getElementById('btnRedo');
+        const uploadButtons = Array.from(uploadCard.querySelectorAll('button'));
         
         // 吸附力道 UI 控制
         const autoSnapCheckbox = document.getElementById('autoSnap');
@@ -621,6 +721,52 @@
             snapStrengthValue.textContent = strengthTextMap[snapStrengthSlider.value];
         });
         updateSnapUI(); // 初始化
+
+        function waitForPaint() {
+            return new Promise(resolve => {
+                requestAnimationFrame(() => requestAnimationFrame(resolve));
+            });
+        }
+
+        function setStatusPanel(panel, titleEl, messageEl, title, message, state = 'loading') {
+            if (!panel) return;
+            if (titleEl) titleEl.textContent = title;
+            if (messageEl) messageEl.textContent = message;
+            panel.classList.add('is-visible');
+            panel.classList.toggle('done', state === 'done');
+            panel.setAttribute('aria-hidden', 'false');
+        }
+
+        function hideStatusPanel(panel) {
+            if (!panel) return;
+            panel.classList.remove('is-visible', 'done');
+            panel.setAttribute('aria-hidden', 'true');
+        }
+
+        function setImagePrepStatus(title, message) {
+            setStatusPanel(imagePrepStatus, imagePrepTitle, imagePrepMessage, title, message);
+            uploadButtons.forEach(button => { button.disabled = true; });
+        }
+
+        function hideImagePrepStatus() {
+            hideStatusPanel(imagePrepStatus);
+            uploadButtons.forEach(button => { button.disabled = false; });
+        }
+
+        function setImageAnalysisStatus(title, message, state = 'loading') {
+            setStatusPanel(imageAnalysisStatus, imageAnalysisTitle, imageAnalysisMessage, title, message, state);
+        }
+
+        function hideImageAnalysisStatus() {
+            hideStatusPanel(imageAnalysisStatus);
+        }
+
+        function finishImageAnalysisStatus(message) {
+            setImageAnalysisStatus('分析完成', message, 'done');
+            setTimeout(() => {
+                hideImageAnalysisStatus();
+            }, 1200);
+        }
 
         // ==========================================
         // 2. 全域狀態變數 (Global State)
@@ -982,16 +1128,21 @@
             processBtn.textContent = cvReady ? '✂️ 裁切圖片' : '⏳ 影像引擎載入中';
         }
 
-        function runPendingOpenCvAutoDetect() {
+        async function runPendingOpenCvAutoDetect() {
             if (!pendingOpenCvAutoDetect || !allowDeferredAutoDetect || !cvReady) return;
             if (document.getElementById('editorCard').style.display !== 'block') return;
 
             pendingOpenCvAutoDetect = false;
             allowDeferredAutoDetect = false;
+            setImageAnalysisStatus('正在尋找邊界', '影像引擎已載入，正在自動抓取文件邊界。');
+            await waitForPaint();
+
             if (autoDetectCornersLocal()) {
                 savePointsState();
+                finishImageAnalysisStatus('已自動定位邊界，可以微調角點或直接裁切。');
             } else {
                 updateQualityCheckNotice();
+                finishImageAnalysisStatus('圖片已載入，可以手動調整角點。');
             }
         }
 
@@ -1158,11 +1309,15 @@
         imageObj.onload = async () => {
             revokeCurrentImageObjectUrl();
 
+            setImagePrepStatus('正在開啟編輯器', '正在建立裁切框與檢查圖片品質。');
+            await waitForPaint();
+
             canvas.width = imageObj.width;
             canvas.height = imageObj.height;
-            document.getElementById('uploadCard').style.display = 'none'; // 隱藏首頁區塊，節省空間
-            document.getElementById('editorCard').style.display = 'block';
+            uploadCard.style.display = 'none'; // 隱藏首頁區塊，節省空間
+            editorCard.style.display = 'block';
             document.getElementById('resultCard').style.display = 'none';
+            hideImagePrepStatus();
             updatePdfCartVisibility();
             
             resetTransform(); // 載入新圖片時重置縮放狀態
@@ -1180,6 +1335,9 @@
             updateSourceQualityNotice();
             imageQualityIssues = analyzeImageQuality();
 
+            setImageAnalysisStatus('正在分析圖片', '正在自動抓取文件邊界，完成後會顯示可調整的角點。');
+            await waitForPaint();
+
             // 優先使用已就緒的 YOLO；模型還在背景載入時，直接使用 OpenCV 或預設裁切框。
             let autoDetected = false;
             if (yoloModel) {
@@ -1187,10 +1345,13 @@
             }
             if (!autoDetected) {
                 if (cvReady) {
+                    setImageAnalysisStatus('正在尋找邊界', 'AI 尚未定位成功，正在改用本機影像偵測。');
+                    await waitForPaint();
                     autoDetected = autoDetectCornersLocal();
                     allowDeferredAutoDetect = false;
                 } else {
                     pendingOpenCvAutoDetect = true;
+                    setImageAnalysisStatus('等待影像引擎', '圖片已準備好，影像引擎載入後會自動嘗試抓取邊界。');
                     setEngineStatus('照片已載入；影像引擎仍在背景載入，完成後會自動嘗試抓取邊界。');
                 }
             }
@@ -1200,40 +1361,65 @@
             pointsHistory = [];
             historyIndex = -1;
             savePointsState();
+
+            if (!pendingOpenCvAutoDetect) {
+                finishImageAnalysisStatus(autoDetected ? '已自動定位邊界，可以微調角點或直接裁切。' : '圖片已載入，可以手動調整角點。');
+            }
         };
+
+        imageObj.onerror = () => {
+            hideImagePrepStatus();
+            hideImageAnalysisStatus();
+            alert('圖片載入失敗，請重新選取照片。');
+        };
+
+        function canvasToBlobAsync(canvas, type, quality) {
+            return new Promise(resolve => {
+                canvas.toBlob(resolve, type, quality);
+            });
+        }
 
         // 處理照片選擇的共用邏輯 (加入記憶體防護預縮放)
         const handleFileSelect = async (e) => {
             if (!e.target.files[0]) return;
             let file = e.target.files[0];
-            
+
+            setImagePrepStatus('正在讀取圖片', '已收到照片，正在解碼並準備預覽。');
+            await waitForPaint();
+
             const tempImg = new Image();
             const tempUrl = URL.createObjectURL(file);
-            tempImg.onload = () => {
+            tempImg.onload = async () => {
                 URL.revokeObjectURL(tempUrl);
 
-                const originalWidth = tempImg.width;
-                const originalHeight = tempImg.height;
-                const maxSourceDim = getSourceImageMaxDimension(originalWidth, originalHeight);
-                let width = originalWidth;
-                let height = originalHeight;
-                
-                if (width > maxSourceDim || height > maxSourceDim) {
-                    console.log(`📸 圖片過大 (${originalWidth}x${originalHeight})，執行防閃退預縮放至長邊 ${maxSourceDim}px...`);
-                    const ratio = Math.min(maxSourceDim / width, maxSourceDim / height);
-                    width = Math.round(width * ratio);
-                    height = Math.round(height * ratio);
-                    
-                    const offCanvas = document.createElement('canvas');
-                    offCanvas.width = width;
-                    offCanvas.height = height;
-                    const offCtx = offCanvas.getContext('2d');
-                    offCtx.drawImage(tempImg, 0, 0, width, height);
-                    
-                    offCanvas.toBlob((blob) => {
+                try {
+                    const originalWidth = tempImg.width;
+                    const originalHeight = tempImg.height;
+                    const maxSourceDim = getSourceImageMaxDimension(originalWidth, originalHeight);
+                    let width = originalWidth;
+                    let height = originalHeight;
+
+                    setImagePrepStatus('正在檢查圖片', `原始尺寸 ${formatDimensions(originalWidth, originalHeight)}，正在準備可編輯版本。`);
+                    await waitForPaint();
+
+                    if (width > maxSourceDim || height > maxSourceDim) {
+                        console.log(`📸 圖片過大 (${originalWidth}x${originalHeight})，執行防閃退預縮放至長邊 ${maxSourceDim}px...`);
+                        setImagePrepStatus('正在最佳化圖片', '高解析照片較大，正在縮小到手機較穩定的處理尺寸。');
+                        await waitForPaint();
+
+                        const ratio = Math.min(maxSourceDim / width, maxSourceDim / height);
+                        width = Math.round(width * ratio);
+                        height = Math.round(height * ratio);
+
+                        const offCanvas = document.createElement('canvas');
+                        offCanvas.width = width;
+                        offCanvas.height = height;
+                        const offCtx = offCanvas.getContext('2d');
+                        offCtx.drawImage(tempImg, 0, 0, width, height);
+
+                        const blob = await canvasToBlobAsync(offCanvas, 'image/jpeg', 0.95);
                         if (!blob) {
-                            console.error('圖片預縮放失敗');
-                            return;
+                            throw new Error('圖片預縮放失敗');
                         }
                         sourceImageInfo = {
                             originalWidth,
@@ -1245,23 +1431,29 @@
                         };
                         currentFile = new File([blob], file.name, { type: 'image/jpeg' });
                         setImageSourceFromFile(currentFile);
-                    }, 'image/jpeg', 0.95);
-                } else {
-                    sourceImageInfo = {
-                        originalWidth,
-                        originalHeight,
-                        workingWidth: width,
-                        workingHeight: height,
-                        maxSourceDim,
-                        wasPreScaled: false
-                    };
-                    currentFile = file;
-                    setImageSourceFromFile(currentFile);
+                    } else {
+                        sourceImageInfo = {
+                            originalWidth,
+                            originalHeight,
+                            workingWidth: width,
+                            workingHeight: height,
+                            maxSourceDim,
+                            wasPreScaled: false
+                        };
+                        currentFile = file;
+                        setImageSourceFromFile(currentFile);
+                    }
+                } catch (err) {
+                    console.error('圖片準備失敗', err);
+                    hideImagePrepStatus();
+                    alert('圖片準備失敗，請重新選取照片。');
                 }
             };
             tempImg.onerror = () => {
                 URL.revokeObjectURL(tempUrl);
                 console.error('圖片載入失敗');
+                hideImagePrepStatus();
+                alert('圖片載入失敗，請重新選取照片。');
             };
             tempImg.src = tempUrl;
             
@@ -1663,7 +1855,6 @@
         // 呼叫 OpenCV.js 在本機端自動抓 4 個角
         function autoDetectCornersLocal() {
             if (!cvReady) return false;
-            let src = null;
             let resized = null;
             let gray = null;
             let blur = null;
@@ -1674,12 +1865,15 @@
             const sortableContours = [];
 
             try {
-                src = cv.imread(imageObj);
-                let ratio = src.rows / 500.0;
+                let ratio = imageObj.height / 500.0;
                 if (ratio < 1.0) ratio = 1.0;
-                let dsize = new cv.Size(Math.round(src.cols / ratio), 500);
-                resized = new cv.Mat();
-                cv.resize(src, resized, dsize, 0, 0, cv.INTER_AREA);
+                const detectWidth = Math.max(1, Math.round(imageObj.width / ratio));
+                const detectHeight = Math.max(1, Math.round(imageObj.height / ratio));
+                const detectCanvas = document.createElement('canvas');
+                detectCanvas.width = detectWidth;
+                detectCanvas.height = detectHeight;
+                detectCanvas.getContext('2d').drawImage(imageObj, 0, 0, detectWidth, detectHeight);
+                resized = cv.imread(detectCanvas);
 
                 gray = new cv.Mat();
                 cv.cvtColor(resized, gray, cv.COLOR_RGBA2GRAY, 0);
@@ -1739,7 +1933,7 @@
                 return false;
             } finally {
                 sortableContours.forEach(item => disposeCvResources(item.cnt));
-                disposeCvResources(src, resized, gray, blur, edged, morphKernel, contours, hierarchy);
+                disposeCvResources(resized, gray, blur, edged, morphKernel, contours, hierarchy);
             }
         }
 
