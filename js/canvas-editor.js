@@ -3,7 +3,6 @@ import { waitForPaint, setStatusPanel, hideStatusPanel } from './ui.js';
 import { prepareImageFile } from './image-loader.js';
 import { getJsPdfConstructor, loadImageFromDataUrl } from './pdf-export.js';
 import { disposeCvResources, createDetectionMatFromImage } from './detection/opencv.js';
-import { loadYoloModelAssets } from './detection/yolo.js';
 
 export function initScannerApp() {
     // ==========================================
@@ -73,6 +72,40 @@ export function initScannerApp() {
     });
     updateSnapUI(); // 初始化
 
+    // 分段式按鈕群組：點選任一顆演算法即刻套用，省掉「下拉 → 完成」的多餘一步
+    let currentDetectionAlgo = 'canny-hough';
+    function getCurrentDetectionAlgo() {
+        return currentDetectionAlgo || 'canny-hough';
+    }
+    function detectionAlgoLabel(algo) {
+        switch (algo) {
+            case 'ransac': return 'RANSAC';
+            case 'canny-contour': return 'Canny + 輪廓';
+            default: return 'Canny + Hough';
+        }
+    }
+    const detectionAlgoGroup = document.getElementById('detectionAlgo');
+    if (detectionAlgoGroup) {
+        const algoButtons = Array.from(detectionAlgoGroup.querySelectorAll('.algo-btn'));
+        algoButtons.forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const algo = btn.dataset.algo || 'canny-hough';
+                algoButtons.forEach(b => b.classList.toggle('is-active', b === btn));
+                currentDetectionAlgo = algo;
+                if (!imageObj.width) return;
+                setImageAnalysisStatus('正在重新偵測', `正在使用「${detectionAlgoLabel(algo)}」重新抓取邊界。`);
+                await waitForPaint();
+                const ok = await runDetectionByAlgo(algo);
+                if (ok) {
+                    savePointsState();
+                    finishImageAnalysisStatus('已依所選演算法重新定位邊界。');
+                } else {
+                    finishImageAnalysisStatus('該演算法在此照片上找不到明顯邊界，可以試試其他演算法或手動調整。');
+                }
+            });
+        });
+    }
+
     btnCamera.addEventListener('click', () => cameraInput.click());
     btnGallery.addEventListener('click', () => galleryInput.click());
 
@@ -106,15 +139,37 @@ export function initScannerApp() {
     // ==========================================
     const state = createAppState();
 
-    // 控制多頁購物車面板的顯示狀態 (編輯模式時隱藏以免擋住畫面)
+    // 右下角浮動 badge：只在有多頁時出現；點按 badge 開合動作選單
+    const pdfBadgeToggle = document.getElementById('pdfBadgeToggle');
+    const pdfBadgeMenu = document.getElementById('pdfBadgeMenu');
+    function closePdfBadgeMenu() {
+        if (!pdfBadgeMenu) return;
+        pdfBadgeMenu.classList.remove('is-open');
+        pdfBadgeMenu.setAttribute('aria-hidden', 'true');
+    }
+    if (pdfBadgeToggle && pdfBadgeMenu) {
+        pdfBadgeToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = pdfBadgeMenu.classList.toggle('is-open');
+            pdfBadgeMenu.setAttribute('aria-hidden', String(!isOpen));
+        });
+        pdfBadgeMenu.addEventListener('click', (e) => {
+            if (e.target.closest('button')) closePdfBadgeMenu();
+        });
+        document.addEventListener('click', (e) => {
+            if (!pdfCart.contains(e.target)) closePdfBadgeMenu();
+        });
+    }
+
     function updatePdfCartVisibility() {
-        const isEditorActive = document.getElementById('editorCard').style.display === 'block';
-        pdfCart.style.display = (state.pdfPages.length > 0 && !isEditorActive) ? 'block' : 'none';
+        const shouldShow = state.pdfPages.length > 0;
+        pdfCart.classList.toggle('is-hidden', !shouldShow);
+        if (!shouldShow) closePdfBadgeMenu();
     }
 
     // 檢查瀏覽器是否支援 Web Share API，若支援則顯示分享按鈕
     if (navigator.share) {
-        shareBtn.style.display = 'block';
+        shareBtn.classList.remove('is-hidden');
     }
     let imageObj = new Image();
 
@@ -311,11 +366,16 @@ export function initScannerApp() {
 
     let points = []; // [{x, y}, {x, y}, {x, y}, {x, y}]
     let draggingIdx = -1;
-    let selectedIdx = 0; // 紀錄目前被選中的點
+    let selectedIdx = 0; // 紀錄目前被選中的點（供方向鍵微調使用）
     let isDragging = false; // 紀錄是否真的有發生拖曳移動
     let draggingEdgeIdx = -1; // 紀錄目前正在拖拉的「邊」
     let selectedEdgeIdx = -1; // 紀錄目前被選中的「邊」
     let lastEdgeDragPoint = null; // 紀錄邊緣拖曳的上一幀座標
+
+    // 兩段式操作：第一次點只選取，再點同一個控制點才允許拖曳。
+    // armed 的值代表「已進入待拖曳狀態」的角點 / 邊索引，避免手指一下按錯把點推開。
+    let armedDragIdx = -1;
+    let armedDragEdgeIdx = -1;
 
     // ==========================================
     // 2.5 歷史紀錄 (Undo / Redo) 邏輯
@@ -350,6 +410,8 @@ export function initScannerApp() {
         if (historyIndex > 0) {
             historyIndex--;
             points = JSON.parse(JSON.stringify(pointsHistory[historyIndex]));
+            armedDragIdx = -1;
+            armedDragEdgeIdx = -1;
             drawCanvas(); updateUndoRedoUI(); updateQualityCheckNotice();
         }
     });
@@ -357,6 +419,8 @@ export function initScannerApp() {
         if (historyIndex < pointsHistory.length - 1) {
             historyIndex++;
             points = JSON.parse(JSON.stringify(pointsHistory[historyIndex]));
+            armedDragIdx = -1;
+            armedDragEdgeIdx = -1;
             drawCanvas(); updateUndoRedoUI(); updateQualityCheckNotice();
         }
     });
@@ -396,14 +460,8 @@ export function initScannerApp() {
         updateCanvasTransform();
     }
 
-    // AI 與 OpenCV 引擎初始化
+    // OpenCV 引擎初始化
     let cvReady = false;
-    let tfReady = typeof tf !== 'undefined';
-    let yoloModel = null;
-    let yoloClassNames = [];
-    let yoloStatus = 'idle';
-    let yoloLoadPromise = null;
-    let yoloLoadScheduled = false;
     let engineStatusHideTimer = null;
     let pendingOpenCvAutoDetect = false;
     let allowDeferredAutoDetect = false;
@@ -428,20 +486,16 @@ export function initScannerApp() {
             setEngineStatus('影像引擎正在背景載入；你可以先拍照或選取照片。');
             return;
         }
-
-        if (yoloStatus === 'ready') {
-            setEngineStatus('AI 模型已就緒。', 'ready');
-        } else if (yoloStatus === 'failed') {
-            setEngineStatus('基礎影像引擎已就緒；AI 模型暫不可用，將使用基礎偵測。', 'warning');
-        } else {
-            setEngineStatus('基礎影像引擎已就緒；AI 模型正在背景載入。');
-        }
+        setEngineStatus('影像引擎已就緒。', 'ready');
     }
 
+    const processBtnLabel = processBtn.querySelector('span');
     function updateProcessButtonState() {
         if (document.getElementById('editorCard').style.display !== 'block') return;
         processBtn.disabled = !cvReady;
-        processBtn.textContent = cvReady ? '✂️ 裁切圖片' : '⏳ 影像引擎載入中';
+        if (processBtnLabel) {
+            processBtnLabel.textContent = cvReady ? '裁切圖片' : '影像引擎載入中';
+        }
     }
 
     async function runPendingOpenCvAutoDetect() {
@@ -453,65 +507,18 @@ export function initScannerApp() {
         setImageAnalysisStatus('正在尋找邊界', '影像引擎已載入，正在自動抓取文件邊界。');
         await waitForPaint();
 
-        if (autoDetectCornersLocal()) {
+        const algo = getCurrentDetectionAlgo();
+        let ok;
+        if (algo === 'ransac') ok = detectByRansac();
+        else if (algo === 'canny-contour') ok = autoDetectCornersLocal();
+        else ok = detectByCannyHough();
+        if (ok) {
             savePointsState();
             finishImageAnalysisStatus('已自動定位邊界，可以微調角點或直接裁切。');
         } else {
             updateQualityCheckNotice();
             finishImageAnalysisStatus('圖片已載入，可以手動調整角點。');
         }
-    }
-
-    function startYoloBackgroundLoad() {
-        if (!tfReady || yoloLoadPromise || yoloLoadScheduled || yoloStatus === 'ready' || yoloStatus === 'failed') return;
-
-        yoloLoadScheduled = true;
-        yoloStatus = 'queued';
-        updateEngineStatus();
-
-        const startLoad = () => {
-            yoloLoadScheduled = false;
-            yoloLoadPromise = loadYoloModel();
-        };
-
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(startLoad, { timeout: 1500 });
-        } else {
-            setTimeout(startLoad, 800);
-        }
-    }
-
-
-    async function loadYoloModel() {
-        try {
-            yoloStatus = 'loading';
-            updateEngineStatus();
-
-            const result = await loadYoloModelAssets({ tf: window.tf });
-            yoloModel = result.model;
-            yoloClassNames = result.classNames;
-            yoloStatus = 'ready';
-            updateEngineStatus();
-            console.log('✅ YOLO 證件模型載入成功！');
-            return true;
-        } catch (e) {
-            yoloModel = null;
-            yoloStatus = 'failed';
-            updateEngineStatus();
-            console.warn('⚠️ YOLO 證件模型不可用，將自動使用 OpenCV 傳統邊緣偵測作為備案。', e);
-            return false;
-        }
-    }
-
-    function onTensorFlowReady() {
-        tfReady = true;
-        startYoloBackgroundLoad();
-    }
-
-    function onTensorFlowError() {
-        tfReady = false;
-        yoloStatus = 'failed';
-        updateEngineStatus();
     }
 
     function onOpenCvReady() {
@@ -527,7 +534,6 @@ export function initScannerApp() {
     }
 
     updateEngineStatus();
-    if (tfReady) startYoloBackgroundLoad();
 
     // 更新滑桿數字顯示
     ['b', 'c', 's', 'sharp', 'denoise'].forEach(id => {
@@ -609,6 +615,8 @@ export function initScannerApp() {
         points = [ {x: m, y: m}, {x: w-m, y: m}, {x: w-m, y: h-m}, {x: m, y: h-m} ];
         selectedIdx = 0; // 預設選取第一個點
         selectedEdgeIdx = -1;
+        armedDragIdx = -1;
+        armedDragEdgeIdx = -1;
         allowDeferredAutoDetect = true;
         pendingOpenCvAutoDetect = false;
         drawCanvas();
@@ -619,22 +627,20 @@ export function initScannerApp() {
         setImageAnalysisStatus('正在分析圖片', '正在自動抓取文件邊界，完成後會顯示可調整的角點。');
         await waitForPaint();
 
-        // 優先使用已就緒的 YOLO；模型還在背景載入時，直接使用 OpenCV 或預設裁切框。
+        // 依使用者選擇的演算法執行自動偵測；影像引擎尚未就緒時延後執行
+        const algo = getCurrentDetectionAlgo();
         let autoDetected = false;
-        if (yoloModel) {
-            autoDetected = await runYoloInference();
-        }
-        if (!autoDetected) {
-            if (cvReady) {
-                setImageAnalysisStatus('正在尋找邊界', 'AI 尚未定位成功，正在改用本機影像偵測。');
-                await waitForPaint();
-                autoDetected = autoDetectCornersLocal();
-                allowDeferredAutoDetect = false;
-            } else {
-                pendingOpenCvAutoDetect = true;
-                setImageAnalysisStatus('等待影像引擎', '圖片已準備好，影像引擎載入後會自動嘗試抓取邊界。');
-                setEngineStatus('照片已載入；影像引擎仍在背景載入，完成後會自動嘗試抓取邊界。');
-            }
+        if (cvReady) {
+            setImageAnalysisStatus('正在尋找邊界', '正在使用所選演算法抓取文件邊界。');
+            await waitForPaint();
+            if (algo === 'ransac') autoDetected = detectByRansac();
+            else if (algo === 'canny-contour') autoDetected = autoDetectCornersLocal();
+            else autoDetected = detectByCannyHough();
+            allowDeferredAutoDetect = false;
+        } else {
+            pendingOpenCvAutoDetect = true;
+            setImageAnalysisStatus('等待影像引擎', '圖片已準備好，影像引擎載入後會自動嘗試抓取邊界。');
+            setEngineStatus('照片已載入；影像引擎仍在背景載入，完成後會自動嘗試抓取邊界。');
         }
         updateProcessButtonState();
 
@@ -760,35 +766,11 @@ export function initScannerApp() {
                 workingHeight: offCanvas.height
             };
         }
-        setImageSourceFromDataUrl(dataUrl); // 觸發 onload，自動重設畫布與呼叫 YOLO
+        setImageSourceFromDataUrl(dataUrl); // 觸發 onload，自動重設畫布並執行自動偵測
     });
 
     function clampNumber(value, min, max) {
         return Math.max(min, Math.min(max, value));
-    }
-
-    function boxIoU(a, b) {
-        const x1 = Math.max(a.x1, b.x1);
-        const y1 = Math.max(a.y1, b.y1);
-        const x2 = Math.min(a.x2, b.x2);
-        const y2 = Math.min(a.y2, b.y2);
-        const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
-        const areaA = Math.max(0, a.x2 - a.x1) * Math.max(0, a.y2 - a.y1);
-        const areaB = Math.max(0, b.x2 - b.x1) * Math.max(0, b.y2 - b.y1);
-        return intersection / Math.max(1, areaA + areaB - intersection);
-    }
-
-    function applyNms(candidates, iouThreshold = 0.45) {
-        const sorted = [...candidates].sort((a, b) => b.conf - a.conf);
-        const kept = [];
-
-        for (const candidate of sorted) {
-            if (kept.every(item => boxIoU(item, candidate) < iouThreshold)) {
-                kept.push(candidate);
-            }
-        }
-
-        return kept;
     }
 
     function orderQuadrilateral(quad) {
@@ -811,266 +793,6 @@ export function initScannerApp() {
 
         const areaRatio = getPolygonArea(quad) / Math.max(1, imageObj.width * imageObj.height);
         return areaRatio >= 0.03 && areaRatio <= 0.98;
-    }
-
-    function readYoloDetectionRows(outputTensor) {
-        const squeezed = outputTensor.squeeze();
-        if (squeezed.shape.length !== 2) {
-            squeezed.dispose();
-            throw new Error(`不支援的 YOLO 輸出形狀: ${outputTensor.shape.join('x')}`);
-        }
-
-        let rowsTensor = squeezed;
-        if (squeezed.shape[0] < squeezed.shape[1]) {
-            rowsTensor = squeezed.transpose();
-            squeezed.dispose();
-        }
-
-        const rows = rowsTensor.arraySync();
-        rowsTensor.dispose();
-        return rows;
-    }
-
-    function buildYoloCandidates(rows, classIndex, classCount) {
-        const inputSize = 640;
-        const confThreshold = 0.3;
-        const maskStart = 4 + classCount;
-        const candidates = [];
-
-        for (const row of rows) {
-            const conf = row[4 + classIndex];
-            if (!Number.isFinite(conf) || conf < confThreshold) continue;
-
-            const cx = row[0], cy = row[1], w = row[2], h = row[3];
-            const x1 = clampNumber(cx - w / 2, 0, inputSize);
-            const y1 = clampNumber(cy - h / 2, 0, inputSize);
-            const x2 = clampNumber(cx + w / 2, 0, inputSize);
-            const y2 = clampNumber(cy + h / 2, 0, inputSize);
-            if ((x2 - x1) < 5 || (y2 - y1) < 5) continue;
-
-            candidates.push({
-                conf,
-                x1, y1, x2, y2,
-                maskCoeffs: row.length > maskStart ? row.slice(maskStart) : []
-            });
-        }
-
-        return candidates;
-    }
-
-    function getProtoLayout(protoTensor) {
-        const shape = protoTensor.shape;
-        if (shape.length === 4) {
-            if (shape[1] <= 64) {
-                return {
-                    channels: shape[1],
-                    height: shape[2],
-                    width: shape[3],
-                    index: (x, y, c) => ((c * shape[2] + y) * shape[3] + x)
-                };
-            }
-            return {
-                channels: shape[3],
-                height: shape[1],
-                width: shape[2],
-                index: (x, y, c) => ((y * shape[2] + x) * shape[3] + c)
-            };
-        }
-
-        if (shape.length === 3) {
-            if (shape[0] <= 64) {
-                return {
-                    channels: shape[0],
-                    height: shape[1],
-                    width: shape[2],
-                    index: (x, y, c) => ((c * shape[1] + y) * shape[2] + x)
-                };
-            }
-            return {
-                channels: shape[2],
-                height: shape[0],
-                width: shape[1],
-                index: (x, y, c) => ((y * shape[1] + x) * shape[2] + c)
-            };
-        }
-
-        return null;
-    }
-
-    function contourToMaskQuad(contour) {
-        const peri = cv.arcLength(contour, true);
-        const approx = new cv.Mat();
-
-        try {
-            for (const eps of [0.01, 0.02, 0.03, 0.04, 0.06, 0.08]) {
-                cv.approxPolyDP(contour, approx, eps * peri, true);
-                if (approx.rows === 4) {
-                    const quad = [];
-                    for (let i = 0; i < 4; i++) {
-                        quad.push({ x: approx.data32S[i * 2], y: approx.data32S[i * 2 + 1] });
-                    }
-                    return orderQuadrilateral(quad);
-                }
-            }
-        } finally {
-            disposeCvResources(approx);
-        }
-
-        const extreme = [];
-        for (let i = 0; i < contour.rows; i++) {
-            extreme.push({ x: contour.data32S[i * 2], y: contour.data32S[i * 2 + 1] });
-        }
-        if (extreme.length < 4) return null;
-        return orderQuadrilateral(extreme);
-    }
-
-    function maskQuadToImagePoints(maskQuad, maskWidth, maskHeight) {
-        const inputSize = 640;
-        const scaleX = imageObj.width / inputSize;
-        const scaleY = imageObj.height / inputSize;
-
-        const mapped = maskQuad.map(p => ({
-            x: clampNumber((p.x / Math.max(1, maskWidth - 1)) * inputSize * scaleX, 0, imageObj.width),
-            y: clampNumber((p.y / Math.max(1, maskHeight - 1)) * inputSize * scaleY, 0, imageObj.height)
-        }));
-
-        return orderQuadrilateral(mapped);
-    }
-
-    function tryDecodeYoloMaskQuad(protoTensor, detection) {
-        if (!cvReady || !protoTensor || !detection.maskCoeffs.length) return null;
-
-        const layout = getProtoLayout(protoTensor);
-        if (!layout || detection.maskCoeffs.length < layout.channels) return null;
-
-        const protoData = protoTensor.dataSync();
-        const inputSize = 640;
-        const x1 = Math.floor((detection.x1 / inputSize) * layout.width);
-        const y1 = Math.floor((detection.y1 / inputSize) * layout.height);
-        const x2 = Math.ceil((detection.x2 / inputSize) * layout.width);
-        const y2 = Math.ceil((detection.y2 / inputSize) * layout.height);
-
-        let mask = null;
-        let contours = null;
-        let hierarchy = null;
-        let kernel = null;
-        let bestContour = null;
-
-        try {
-            mask = cv.Mat.zeros(layout.height, layout.width, cv.CV_8UC1);
-
-            for (let y = Math.max(0, y1); y < Math.min(layout.height, y2); y++) {
-                for (let x = Math.max(0, x1); x < Math.min(layout.width, x2); x++) {
-                    let value = 0;
-                    for (let c = 0; c < layout.channels; c++) {
-                        value += detection.maskCoeffs[c] * protoData[layout.index(x, y, c)];
-                    }
-                    const probability = 1 / (1 + Math.exp(-value));
-                    if (probability > 0.5) mask.ucharPtr(y, x)[0] = 255;
-                }
-            }
-
-            kernel = cv.Mat.ones(3, 3, cv.CV_8U);
-            cv.morphologyEx(mask, mask, cv.MORPH_CLOSE, kernel, new cv.Point(-1, -1), 1);
-
-            contours = new cv.MatVector();
-            hierarchy = new cv.Mat();
-            cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-            let bestArea = 0;
-            for (let i = 0; i < contours.size(); i++) {
-                const contour = contours.get(i);
-                const area = cv.contourArea(contour);
-                if (area > bestArea) {
-                    if (bestContour) bestContour.delete();
-                    bestContour = contour;
-                    bestArea = area;
-                } else {
-                    contour.delete();
-                }
-            }
-
-            if (!bestContour || bestArea < 20) return null;
-            const maskQuad = contourToMaskQuad(bestContour);
-            if (!maskQuad) return null;
-
-            const imageQuad = maskQuadToImagePoints(maskQuad, layout.width, layout.height);
-            return isUsableQuad(imageQuad) ? imageQuad : null;
-        } catch (err) {
-            console.warn('YOLO mask 後處理失敗，改用外框。', err);
-            return null;
-        } finally {
-            disposeCvResources(bestContour, kernel, mask, contours, hierarchy);
-        }
-    }
-
-    function detectionBoxToImagePoints(detection) {
-        const scaleX = imageObj.width / 640;
-        const scaleY = imageObj.height / 640;
-        return [
-            { x: detection.x1 * scaleX, y: detection.y1 * scaleY },
-            { x: detection.x2 * scaleX, y: detection.y1 * scaleY },
-            { x: detection.x2 * scaleX, y: detection.y2 * scaleY },
-            { x: detection.x1 * scaleX, y: detection.y2 * scaleY }
-        ];
-    }
-
-    /**
-     * 執行 TensorFlow.js (YOLO) 模型進行證件邊界預測
-     * @returns {Promise<boolean>} 是否成功偵測到證件
-     */
-    async function runYoloInference() {
-        if (!yoloModel) return false;
-        const idCardClassIndex = yoloClassNames.indexOf('id_card');
-        if (idCardClassIndex === -1) return false;
-
-        let tensor = null;
-        let resized = null;
-        let scaled = null;
-        let normalized = null;
-        let predictions = null;
-
-        try {
-            // 1. 圖片前處理：轉 Tensor、縮放至 640x640、正規化並擴充維度 [1, 640, 640, 3]
-            tensor = tf.browser.fromPixels(imageObj);
-            resized = tf.image.resizeBilinear(tensor, [640, 640]);
-            scaled = resized.div(255.0);
-            normalized = scaled.expandDims(0);
-
-            // 2. 執行推論
-            predictions = await yoloModel.executeAsync(normalized);
-            const output0 = Array.isArray(predictions) ? predictions[0] : predictions;
-            const protoOutput = Array.isArray(predictions) ? predictions[1] : null;
-
-            // 3. 解析輸出，支援 [1, channels, anchors] 或 [1, anchors, channels]
-            const rows = readYoloDetectionRows(output0);
-            const candidates = buildYoloCandidates(rows, idCardClassIndex, yoloClassNames.length);
-            const detections = applyNms(candidates, 0.45);
-            const bestDetection = detections[0];
-
-            if (bestDetection) {
-                const maskPoints = tryDecodeYoloMaskQuad(protoOutput, bestDetection);
-                points = maskPoints || detectionBoxToImagePoints(bestDetection);
-                selectedIdx = 0; drawCanvas();
-                selectedEdgeIdx = -1;
-                updateQualityCheckNotice();
-                console.log(`✅ YOLO 偵測成功，信心度 ${(bestDetection.conf * 100).toFixed(1)}%，候選 ${candidates.length} 個，NMS 後 ${detections.length} 個。`);
-                return true;
-            }
-            return false;
-        } catch(e) {
-            console.error("YOLO 推論失敗", e);
-            return false;
-        } finally {
-            if (tensor) tensor.dispose();
-            if (resized) resized.dispose();
-            if (scaled) scaled.dispose();
-            if (normalized) normalized.dispose();
-            if (predictions) {
-                if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
-                else predictions.dispose();
-            }
-        }
     }
 
     // 呼叫 OpenCV.js 在本機端自動抓 4 個角
@@ -1139,8 +861,11 @@ export function initScannerApp() {
             }
 
             if (found) {
-                selectedIdx = 0; drawCanvas();
+                selectedIdx = 0;
                 selectedEdgeIdx = -1;
+                armedDragIdx = -1;
+                armedDragEdgeIdx = -1;
+                drawCanvas();
             }
             return found;
         } catch (err) {
@@ -1150,6 +875,246 @@ export function initScannerApp() {
             sortableContours.forEach(item => disposeCvResources(item.cnt));
             disposeCvResources(resized, gray, blur, edged, morphKernel, contours, hierarchy);
         }
+    }
+
+    // ==========================================
+    // 3.5 進階自動偵測演算法：Canny + Hough / RANSAC
+    // ==========================================
+
+    function applyQuadFromDetection(quad, ratio) {
+        const mapped = quad.map(p => ({
+            x: clampNumber(p.x * ratio, 0, imageObj.width),
+            y: clampNumber(p.y * ratio, 0, imageObj.height)
+        }));
+        const ordered = orderQuadrilateral(mapped);
+        if (!isUsableQuad(ordered)) return false;
+        points = ordered;
+        selectedIdx = 0;
+        selectedEdgeIdx = -1;
+        armedDragIdx = -1;
+        armedDragEdgeIdx = -1;
+        drawCanvas();
+        return true;
+    }
+
+    // 兩條線段以直線延伸後的交點；平行則回傳 null
+    function intersectLines(a, b) {
+        const den = (a.x1 - a.x2) * (b.y1 - b.y2) - (a.y1 - a.y2) * (b.x1 - b.x2);
+        if (Math.abs(den) < 1e-6) return null;
+        const t = ((a.x1 - b.x1) * (b.y1 - b.y2) - (a.y1 - b.y1) * (b.x1 - b.x2)) / den;
+        return { x: a.x1 + t * (a.x2 - a.x1), y: a.y1 + t * (a.y2 - a.y1) };
+    }
+
+    // 把一組線段依角度分為「近水平」與「近垂直」兩群，並回傳最外側的 top/bottom/left/right 四條
+    function pickBorderLines(lines, imgW, imgH) {
+        const normalize = angle => {
+            let a = angle;
+            while (a < -Math.PI / 2) a += Math.PI;
+            while (a > Math.PI / 2) a -= Math.PI;
+            return a;
+        };
+        const horiz = [];
+        const vert = [];
+        for (const s of lines) {
+            const angle = Math.abs(normalize(Math.atan2(s.y2 - s.y1, s.x2 - s.x1)));
+            if (angle < Math.PI / 4) horiz.push(s);
+            else vert.push(s);
+        }
+        if (horiz.length < 2 || vert.length < 2) return null;
+
+        const midY = s => {
+            if (Math.abs(s.x2 - s.x1) < 1e-6) return (s.y1 + s.y2) / 2;
+            return s.y1 + (imgW / 2 - s.x1) * (s.y2 - s.y1) / (s.x2 - s.x1);
+        };
+        const midX = s => {
+            if (Math.abs(s.y2 - s.y1) < 1e-6) return (s.x1 + s.x2) / 2;
+            return s.x1 + (imgH / 2 - s.y1) * (s.x2 - s.x1) / (s.y2 - s.y1);
+        };
+
+        horiz.sort((a, b) => midY(a) - midY(b));
+        vert.sort((a, b) => midX(a) - midX(b));
+
+        return {
+            top: horiz[0],
+            bottom: horiz[horiz.length - 1],
+            left: vert[0],
+            right: vert[vert.length - 1]
+        };
+    }
+
+    function quadFromBorders(borders) {
+        const tl = intersectLines(borders.top, borders.left);
+        const tr = intersectLines(borders.top, borders.right);
+        const br = intersectLines(borders.bottom, borders.right);
+        const bl = intersectLines(borders.bottom, borders.left);
+        if (!tl || !tr || !br || !bl) return null;
+        return [tl, tr, br, bl];
+    }
+
+    // Canny 邊緣 + Hough Line Transform：適合邊界筆直的證件、名片
+    function detectByCannyHough() {
+        if (!cvReady) return false;
+        let resized = null, gray = null, blur = null, edged = null, lines = null;
+        try {
+            const detectionInput = createDetectionMatFromImage(cv, imageObj, 500);
+            resized = detectionInput.mat;
+            const ratio = detectionInput.ratio;
+            const w = resized.cols, h = resized.rows;
+
+            gray = new cv.Mat();
+            cv.cvtColor(resized, gray, cv.COLOR_RGBA2GRAY, 0);
+            blur = new cv.Mat();
+            cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+            edged = new cv.Mat();
+            cv.Canny(blur, edged, 50, 150);
+
+            lines = new cv.Mat();
+            const minLen = Math.max(30, Math.min(w, h) * 0.2);
+            cv.HoughLinesP(edged, lines, 1, Math.PI / 180, 60, minLen, 20);
+
+            const segs = [];
+            for (let i = 0; i < lines.rows; i++) {
+                const x1 = lines.data32S[i * 4];
+                const y1 = lines.data32S[i * 4 + 1];
+                const x2 = lines.data32S[i * 4 + 2];
+                const y2 = lines.data32S[i * 4 + 3];
+                segs.push({ x1, y1, x2, y2 });
+            }
+            if (segs.length < 4) return false;
+
+            const borders = pickBorderLines(segs, w, h);
+            if (!borders) return false;
+            const quad = quadFromBorders(borders);
+            if (!quad) return false;
+
+            const ok = applyQuadFromDetection(quad, ratio);
+            if (ok) console.log(`✅ Canny+Hough 偵測成功（線段 ${segs.length} 條）`);
+            return ok;
+        } catch (e) {
+            console.error('Canny+Hough 偵測失敗', e);
+            return false;
+        } finally {
+            disposeCvResources(resized, gray, blur, edged, lines);
+        }
+    }
+
+    // RANSAC 直線擬合：從 Canny 邊緣點反覆抽樣，找出四條主線
+    function detectByRansac() {
+        if (!cvReady) return false;
+        let resized = null, gray = null, blur = null, edged = null;
+        try {
+            const detectionInput = createDetectionMatFromImage(cv, imageObj, 500);
+            resized = detectionInput.mat;
+            const ratio = detectionInput.ratio;
+            const w = resized.cols, h = resized.rows;
+
+            gray = new cv.Mat();
+            cv.cvtColor(resized, gray, cv.COLOR_RGBA2GRAY, 0);
+            blur = new cv.Mat();
+            cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+            edged = new cv.Mat();
+            cv.Canny(blur, edged, 50, 150);
+
+            // 蒐集邊緣點；密度過高時抽樣避免瀏覽器卡頓
+            const data = edged.data;
+            const stride = edged.cols;
+            const rows = edged.rows;
+            const rawPts = [];
+            const step = Math.max(1, Math.floor(Math.sqrt((rows * stride) / 6000)));
+            for (let y = 0; y < rows; y += step) {
+                const base = y * stride;
+                for (let x = 0; x < stride; x += step) {
+                    if (data[base + x] > 0) rawPts.push({ x, y });
+                }
+            }
+            if (rawPts.length < 100) return false;
+
+            const distThresh = Math.max(2, Math.min(w, h) * 0.008);
+            const iters = 250;
+            const found = [];
+            let remaining = rawPts.slice();
+
+            for (let k = 0; k < 4; k++) {
+                if (remaining.length < 40) break;
+                let bestInliers = [];
+                let bestParams = null;
+                const size = remaining.length;
+
+                for (let it = 0; it < iters; it++) {
+                    const i = Math.floor(Math.random() * size);
+                    let j = Math.floor(Math.random() * size);
+                    if (j === i) j = (j + 1) % size;
+                    const p1 = remaining[i], p2 = remaining[j];
+                    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+                    const len = Math.hypot(dx, dy);
+                    if (len < 20) continue;
+                    const nx = -dy / len, ny = dx / len;
+                    const c = -(nx * p1.x + ny * p1.y);
+
+                    let count = 0;
+                    for (let m = 0; m < size; m++) {
+                        const p = remaining[m];
+                        if (Math.abs(nx * p.x + ny * p.y + c) < distThresh) count++;
+                    }
+                    if (count > bestInliers.length) {
+                        bestInliers = [];
+                        for (let m = 0; m < size; m++) {
+                            const p = remaining[m];
+                            if (Math.abs(nx * p.x + ny * p.y + c) < distThresh) bestInliers.push(p);
+                        }
+                        bestParams = { nx, ny, c };
+                    }
+                }
+
+                if (!bestParams || bestInliers.length < 30) break;
+
+                // 以主成份 (PCA) 對 inliers 做最小平方擬合，得到更準的直線方向
+                let mx = 0, my = 0;
+                for (const p of bestInliers) { mx += p.x; my += p.y; }
+                mx /= bestInliers.length; my /= bestInliers.length;
+                let sxx = 0, sxy = 0, syy = 0;
+                for (const p of bestInliers) {
+                    const dxp = p.x - mx, dyp = p.y - my;
+                    sxx += dxp * dxp;
+                    sxy += dxp * dyp;
+                    syy += dyp * dyp;
+                }
+                const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+                const cosT = Math.cos(theta), sinT = Math.sin(theta);
+                found.push({
+                    x1: mx - cosT * 1000, y1: my - sinT * 1000,
+                    x2: mx + cosT * 1000, y2: my + sinT * 1000
+                });
+
+                const inlierKeys = new Set(bestInliers.map(p => (p.y * stride) + p.x));
+                remaining = remaining.filter(p => !inlierKeys.has(p.y * stride + p.x));
+            }
+
+            if (found.length < 4) return false;
+
+            const borders = pickBorderLines(found, w, h);
+            if (!borders) return false;
+            const quad = quadFromBorders(borders);
+            if (!quad) return false;
+
+            const ok = applyQuadFromDetection(quad, ratio);
+            if (ok) console.log(`✅ RANSAC 偵測成功（找到 ${found.length} 條主線）`);
+            return ok;
+        } catch (e) {
+            console.error('RANSAC 偵測失敗', e);
+            return false;
+        } finally {
+            disposeCvResources(resized, gray, blur, edged);
+        }
+    }
+
+    // 根據下拉選單挑選的演算法執行偵測
+    async function runDetectionByAlgo(algo) {
+        if (!algo) algo = getCurrentDetectionAlgo();
+        if (!cvReady) return false;
+        if (algo === 'ransac') return detectByRansac();
+        if (algo === 'canny-contour') return autoDetectCornersLocal();
+        return detectByCannyHough();
     }
 
     // 繪製 Canvas
@@ -1249,6 +1214,50 @@ export function initScannerApp() {
                 ctx.fill();
             }
         });
+
+        // --- 兩段式操作提示：告訴使用者「再拖一次可移動」 ---
+        if (draggingIdx === -1 && draggingEdgeIdx === -1) {
+            let hintPos = null;
+            if (armedDragIdx !== -1 && points[armedDragIdx]) {
+                hintPos = points[armedDragIdx];
+            } else if (armedDragEdgeIdx !== -1) {
+                const a = points[armedDragEdgeIdx];
+                const b = points[(armedDragEdgeIdx + 1) % 4];
+                if (a && b) hintPos = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            }
+            if (hintPos) {
+                const text = '再拖一次可移動';
+                const fontPx = Math.max(14, (canvas.width * 0.028) / transform.scale);
+                const padX = fontPx * 0.6;
+                const padY = fontPx * 0.35;
+                ctx.save();
+                ctx.font = `bold ${fontPx}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const boxW = ctx.measureText(text).width + padX * 2;
+                const boxH = fontPx + padY * 2;
+                const offset = fontPx * 1.6; // 提示框與點的距離
+                let bx = hintPos.x - boxW / 2;
+                let by = hintPos.y - boxH - offset;
+                if (by < 0) by = hintPos.y + offset; // 靠近上緣時改放下方
+                bx = Math.max(0, Math.min(canvas.width - boxW, bx));
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+                ctx.strokeStyle = 'rgba(255, 235, 60, 0.95)';
+                ctx.lineWidth = Math.max(1, (canvas.width * 0.002) / transform.scale);
+                ctx.beginPath();
+                if (typeof ctx.roundRect === 'function') {
+                    ctx.roundRect(bx, by, boxW, boxH, padY);
+                } else {
+                    ctx.rect(bx, by, boxW, boxH);
+                }
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#FFEB3C';
+                ctx.fillText(text, bx + boxW / 2, by + boxH / 2);
+                ctx.restore();
+            }
+        }
 
         // --- 放大鏡 (Magnifier) 功能 ---
         let magCenter = null;
@@ -1415,6 +1424,8 @@ export function initScannerApp() {
             // --- 雙指模式：開始縮放 (Pinch to Zoom) ---
             draggingIdx = -1;
             draggingEdgeIdx = -1;
+            armedDragIdx = -1;
+            armedDragEdgeIdx = -1;
             isDragging = false;
             lastPanPoint = null;
             const pts = Array.from(activePointers.values());
@@ -1431,27 +1442,44 @@ export function initScannerApp() {
             // 調整觸控判定半徑，確保放大後觸控範圍不會縮水
             const hitRadius = (canvas.width * 0.08) / transform.scale;
 
-            draggingIdx = points.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
-            if (draggingIdx !== -1) {
-                // 點擊到「角點」
-                selectedIdx = draggingIdx;
+            const cornerHit = points.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
+            if (cornerHit !== -1) {
+                // 點擊到「角點」— 兩段式：第一次僅選取，再點同一個才拖曳
+                selectedIdx = cornerHit;
                 selectedEdgeIdx = -1;
+                if (armedDragIdx === cornerHit) {
+                    draggingIdx = cornerHit; // 第二次點：允許拖曳
+                } else {
+                    draggingIdx = -1;         // 第一次點：只選取，不移動
+                    armedDragIdx = cornerHit;
+                    armedDragEdgeIdx = -1;
+                }
                 isDragging = false;
                 lastPanPoint = null;
             } else {
                 // 檢查是否點擊到「邊緣中點」
                 const midpoints = points.map((p, i) => ({ x: (p.x + points[(i + 1) % 4].x) / 2, y: (p.y + points[(i + 1) % 4].y) / 2 }));
-                draggingEdgeIdx = midpoints.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
+                const edgeHit = midpoints.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
 
-                if (draggingEdgeIdx !== -1) {
-                    selectedEdgeIdx = draggingEdgeIdx;
+                if (edgeHit !== -1) {
+                    selectedEdgeIdx = edgeHit;
                     selectedIdx = -1;
+                    if (armedDragEdgeIdx === edgeHit) {
+                        draggingEdgeIdx = edgeHit; // 第二次點：允許拖曳
+                        lastEdgeDragPoint = { x: pos.x, y: pos.y };
+                    } else {
+                        draggingEdgeIdx = -1;      // 第一次點：只選取
+                        armedDragEdgeIdx = edgeHit;
+                        armedDragIdx = -1;
+                        lastEdgeDragPoint = null;
+                    }
                     isDragging = false;
                     lastPanPoint = null;
-                    lastEdgeDragPoint = { x: pos.x, y: pos.y };
                 } else {
                     selectedIdx = -1;
                     selectedEdgeIdx = -1;
+                    armedDragIdx = -1;
+                    armedDragEdgeIdx = -1;
                     lastPanPoint = { x: e.clientX, y: e.clientY }; // 準備單指平移
                 }
             }
@@ -1575,10 +1603,31 @@ export function initScannerApp() {
             savePointsState(); // 每次方向鍵微調後儲存
         }
     };
-    document.getElementById('btnUp').addEventListener('click', () => nudgePoint(0, -1));
-    document.getElementById('btnDown').addEventListener('click', () => nudgePoint(0, 1));
-    document.getElementById('btnLeft').addEventListener('click', () => nudgePoint(-1, 0));
-    document.getElementById('btnRight').addEventListener('click', () => nudgePoint(1, 0));
+    // 支援「按住連發」的方向鍵：pointerdown 立即動一次，400ms 後開始每 60ms 加速一次，並附上輕震動回饋
+    function bindNudgeButton(id, dx, dy) {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        let holdTimer = null;
+        let repeatTimer = null;
+        const vibrate = () => { try { navigator.vibrate?.(12); } catch (_) {} };
+        const fire = () => { nudgePoint(dx, dy); vibrate(); };
+        const stop = () => {
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+        };
+        btn.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            fire();
+            holdTimer = setTimeout(() => {
+                repeatTimer = setInterval(fire, 60);
+            }, 400);
+        });
+        ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach(ev => btn.addEventListener(ev, stop));
+    }
+    bindNudgeButton('btnUp', 0, -1);
+    bindNudgeButton('btnDown', 0, 1);
+    bindNudgeButton('btnLeft', -1, 0);
+    bindNudgeButton('btnRight', 1, 0);
 
     // ==========================================
     // 5. 核心影像處理管線 (OpenCV.js)
@@ -1771,7 +1820,9 @@ export function initScannerApp() {
                 maxSharpened, sharpenKernel, tempImg, hsv, channels, saturationChannel,
                 finalResult, grayMat
             );
-            loading.style.display = 'none'; processBtn.disabled = false; processBtn.textContent = '✂️ 裁切圖片';
+            loading.style.display = 'none';
+            processBtn.disabled = false;
+            if (processBtnLabel) processBtnLabel.textContent = '裁切圖片';
         }
     });
 
@@ -2066,9 +2117,19 @@ export function initScannerApp() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
+    // 結果頁「下一張」：回到首頁繼續掃描下一份文件
+    const btnNextScan = document.getElementById('btnNextScan');
+    if (btnNextScan) {
+        btnNextScan.addEventListener('click', () => {
+            document.getElementById('resultCard').style.display = 'none';
+            document.getElementById('editorCard').style.display = 'none';
+            document.getElementById('uploadCard').style.display = 'block';
+            updatePdfCartVisibility();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    }
+
     return {
-        onTensorFlowReady,
-        onTensorFlowError,
         onOpenCvReady,
         onOpenCvError
     };

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'id-scanner-v2.1.2'; // 更新版本號以觸發 PWA 強制更新
+const CACHE_NAME = 'id-scanner-v2.5.5'; // 更新版本號以觸發 PWA 強制更新
 const urlsToCache = [
     './',
     './index.html',
@@ -10,12 +10,10 @@ const urlsToCache = [
     './js/canvas-editor.js',
     './js/pdf-export.js',
     './js/detection/opencv.js',
-    './js/detection/yolo.js',
     './manifest.json',
     './icon.svg',
     './icon-192.png',
     './icon-512.png',
-    'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs',
     'https://docs.opencv.org/4.8.0/opencv.js'
 ];
 
@@ -48,7 +46,6 @@ self.addEventListener('fetch', event => {
                     return cachedResponse;
                 }
                 // 2. 如果快取沒有，去網路下載，並順手存入快取供未來離線使用。
-                // YOLO 模型不在 install 階段預抓，避免首次開啟時和頁面背景載入重複下載。
                 return fetch(event.request).then(networkResponse => {
                     return caches.open(CACHE_NAME).then(cache => {
                         cache.put(event.request, networkResponse.clone());

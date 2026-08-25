@@ -3,8 +3,8 @@
   "short_name": "證件掃描",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f4f6f8",
-  "theme_color": "#007bff",
+  "background_color": "#faf6f2",
+  "theme_color": "#d97757",
   "icons": [
     {
       "src": "./icon-192.png",

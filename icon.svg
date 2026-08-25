@@ -2,20 +2,20 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="120" y1="80" x2="900" y2="920" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#020617"/>
-      <stop offset="0.5" stop-color="#0F172A"/>
-      <stop offset="1" stop-color="#111827"/>
+      <stop stop-color="#5b2f14"/>
+      <stop offset="0.5" stop-color="#7a3f1b"/>
+      <stop offset="1" stop-color="#8d4a20"/>
     </linearGradient>
 
-    <linearGradient id="neon" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#00F5FF"/>
-      <stop offset="1" stop-color="#7C3AED"/>
+    <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#ffb47a"/>
+      <stop offset="1" stop-color="#d97757"/>
     </linearGradient>
 
     <linearGradient id="scan" x1="0" y1="0" x2="1" y2="0">
-      <stop stop-color="#00F5FF" stop-opacity="0"/>
-      <stop offset="0.5" stop-color="#67E8F9"/>
-      <stop offset="1" stop-color="#00F5FF" stop-opacity="0"/>
+      <stop stop-color="#ffb47a" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#f4a261"/>
+      <stop offset="1" stop-color="#ffb47a" stop-opacity="0"/>
     </linearGradient>
 
     <filter id="glow">
@@ -27,7 +27,7 @@
     </filter>
 
     <filter id="softGlow">
-      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#22D3EE" flood-opacity="0.5"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#f4a261" flood-opacity="0.55"/>
     </filter>
   </defs>
 
@@ -35,32 +35,33 @@
   <rect width="1024" height="1024" rx="240" fill="url(#bg)"/>
 
   <!-- Outer scanning frame -->
-  <g stroke="url(#neon)" stroke-width="18" stroke-linecap="round" filter="url(#glow)">
+  <g stroke="url(#warm)" stroke-width="18" stroke-linecap="round" filter="url(#glow)">
     <path d="M240 360V240H360"/>
     <path d="M664 240H784V360"/>
     <path d="M240 664V784H360"/>
     <path d="M664 784H784V664"/>
   </g>
 
-  <!-- Central holographic card -->
+  <!-- Central card -->
   <g filter="url(#softGlow)">
     <rect x="280" y="280" width="464" height="464" rx="40"
-          fill="#0B1120"
-          stroke="url(#neon)"
+          fill="#3a1e0e"
+          stroke="url(#warm)"
           stroke-width="10"/>
   </g>
 
-  <!-- AI image area -->
+  <!-- Inner image area -->
   <rect x="340" y="340" width="344" height="344" rx="24"
-        fill="#111827"
-        stroke="#334155"
+        fill="#4a2b17"
+        stroke="#8a5a3a"
         stroke-width="4"/>
 
-  <!-- Landscape -->
-  <circle cx="590" cy="420" r="34" fill="#22D3EE" opacity="0.85"/>
+  <!-- Sun -->
+  <circle cx="590" cy="420" r="34" fill="#ffb47a" opacity="0.9"/>
 
+  <!-- Landscape -->
   <path d="M360 620L455 500L535 580L615 460L664 520V664H360V620Z"
-        fill="url(#neon)"
+        fill="url(#warm)"
         opacity="0.9"/>
 
   <!-- Scan line -->
@@ -69,15 +70,14 @@
         filter="url(#glow)"/>
 
   <!-- Precision crop icon -->
-  <g stroke="#67E8F9" stroke-width="16" stroke-linecap="round" filter="url(#glow)">
+  <g stroke="#ffd1a8" stroke-width="16" stroke-linecap="round" filter="url(#glow)">
     <path d="M690 470V640"/>
     <path d="M610 550H780"/>
   </g>
 
-  <!-- Futuristic dots -->
-  <circle cx="300" cy="220" r="6" fill="#22D3EE"/>
-  <circle cx="740" cy="220" r="6" fill="#7C3AED"/>
-  <circle cx="220" cy="740" r="6" fill="#22D3EE"/>
-  <circle cx="804" cy="740" r="6" fill="#7C3AED"/>
-
+  <!-- Corner dots -->
+  <circle cx="300" cy="220" r="6" fill="#ffb47a"/>
+  <circle cx="740" cy="220" r="6" fill="#f4a261"/>
+  <circle cx="220" cy="740" r="6" fill="#ffb47a"/>
+  <circle cx="804" cy="740" r="6" fill="#f4a261"/>
 </svg>
