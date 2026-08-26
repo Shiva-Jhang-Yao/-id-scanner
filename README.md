@@ -1,75 +1,120 @@
 # 📱 手機證件掃描器 (ID Card Scanner PWA)
 
-這是一個基於純前端技術、AI 驅動的證件掃描 Web App。它利用您手機的瀏覽器，在 **100% 離線** 的單機環境下，提供媲美原生 App 的證件裁切、影像優化與格式轉換功能。
+純前端、100% 離線、隱私第一的證件 / 文件掃描 Web App。打開網址就用，不需要下載 App，照片絕不上傳。
 
-**線上體驗 Demo:** [https://shiva-jhang-yao.github.io/-id-scanner/](https://shiva-jhang-yao.github.io/-id-scanner/)
-
-操作展示 GIF 可在錄製完成後再補上。
+**線上體驗：** [https://shiva-jhang-yao.github.io/-id-scanner/](https://shiva-jhang-yao.github.io/-id-scanner/)
 
 ---
 
 ## ✨ 核心特色
 
-*   **🚀 純前端 AI 運算 (Edge AI):**
-    *   **YOLOv8-tfjs:** 在瀏覽器端即時偵測證件外框，自動標記四個角落。
-    *   **OpenCV.js:** 執行透視校正、邊緣吸附、影像濾鏡與二值化等所有影像處理，零延遲、零伺服器負擔。
-*   **🔒 絕對隱私與安全:**
-    *   所有運算皆在您的手機上完成，照片**永不上傳**至任何伺服器。
-    *   支援 100% 離線使用，確保個資絕不外洩。
-*   **📱 媲美原生 App 的體驗 (PWA):**
-    *   可「加入主畫面」安裝至手機桌面，擁有獨立 App 圖示。
-    *   支援全螢幕 `standalone` 模式，隱藏瀏覽器網址列。
-    *   Service Worker 離線快取，即使在飛航模式下也能秒開 App。
-*   **🖱️ 專業級編輯工具:**
-    *   **兩指縮放與單指平移:** 輕鬆檢視圖片任何細節。
-    *   **磁性套索:** 手指靠近邊角時，自動吸附至最精準的像素點。
-    *   **像素級微調:** 提供方向鍵與多段變速，滿足極致的對齊需求。
-    *   **即時濾鏡預覽:** 亮度、對比、飽和度等參數可透過懸浮面板即時調整。
-*   **📄 彈性的輸出選項:**
-    *   支援多種裁切比例（證件、A4、4:3、16:9、自由比例）。
-    *   可選擇輸出解析度，有效縮減檔案大小。
-    *   支援一鍵匯出為 **JPG** 或 **PDF** 格式。
+- **🔒 絕對隱私**：所有影像處理都在你手機的瀏覽器完成，照片從未離開裝置。
+- **📷 一鍵拍攝到 PDF**：拍照 → 自動抓邊 → 微調 → 匯出 JPG / PDF，三步搞定。
+- **🧠 多演算法邊界偵測**：內建四種模式，一鍵切換：
+  - **自動**：三種演算法同時跑，依「四角接近直角、對邊長度對稱、面積合理」打分，擇優套用
+  - **直邊 (Canny + Hough)**：適合證件、名片等邊界筆直的文件
+  - **外框 (Canny + 輪廓)**：適合背景乾淨、外框明顯的情境
+  - **雜訊多 (RANSAC 直線擬合)**：適合背景複雜、光影多的情境
+- **🎯 兩段式選點 + 磁性吸附**：第一次點只選取（避免不小心推歪），再點才拖曳；放開時用局部 Canny + Hough 交點做次像素精修。
+- **🌗 專業級影像後處理**：
+  - 陰影 / 光場校正（morphology background + 除法）
+  - Gray-world 自動白平衡
+  - Bilateral Filter 保邊降噪
+  - Unsharp Mask 銳化
+  - 自適應二值化（block size 依短邊動態）
+- **📄 多頁掃描**：右下角浮動 badge 累積多頁，一鍵合併匯出 A4 PDF。
+- **📱 PWA 體驗**：可加到主畫面、離線可用、獨立 App 圖示、全螢幕 standalone。
 
 ---
 
-## 🛠️ 技術棧 (Tech Stack)
+## 🛠️ 技術棧
 
-*   **AI / CV:**
-    *   Ultralytics YOLOv8: 用於訓練證件偵測模型。
-    *   TensorFlow.js: 在瀏覽器端執行 YOLO 模型推論。
-    *   OpenCV.js: 在瀏覽器端執行所有影像處理演算法。
-*   **前端:**
-    *   純 HTML5 / CSS3 / JavaScript (Vanilla JS)。
-    *   Progressive Web App (PWA) 技術，包含 Manifest 與 Service Worker。
+- **前端**：純 HTML / CSS / Vanilla JS (ES modules)
+- **影像處理**：OpenCV.js (WASM)
+- **效能**：Web Worker + 內建 Mat pool（`(rows, cols, type)` 快取、cap 8），主緒不被影像運算卡死
+- **PWA**：Service Worker 預快取所有資源、離線可用
+- **開發**：Python 3 內建 HTTPS 伺服器（`serve.py`）方便手機透過同 Wi-Fi 熱點測試
 
----
-
-## 🚀 如何部署到您自己的 GitHub Pages
-
-本專案已完全前端化，您不需要任何伺服器即可部署！
-
-1.  **準備部署檔案:**
-    *   將 `index.html`, `manifest.json`, `sw.js`, `icon.svg` 複製到一個新資料夾。
-    *   若您有訓練好的 YOLO 模型，請執行 `yolo export model=best.pt format=tfjs`，並將產生的 `best_web_model` 資料夾重新命名為 `model_web`，一併放入。
-
-2.  **建立 GitHub 儲存庫:**
-    *   登入 GitHub，建立一個新的 **Public** 儲存庫 (例如 `id-scanner`)。
-    *   將您準備好的所有檔案上傳到這個儲存庫的根目錄。
-
-3.  **啟用 GitHub Pages:**
-    *   進入儲存庫的 **Settings** > **Pages**。
-    *   在 `Build and deployment` 區塊，將 Source 設為 `Deploy from a branch`。
-    *   Branch 選擇 `main`，資料夾維持 `/(root)`，點擊 **Save**。
-
-4.  **等待部署:**
-    *   等待約 2-5 分鐘，當頁面上方顯示 "Your site is live at..." 時，即可透過該網址存取。
+沒有後端、沒有雲端、沒有帳號系統，也沒有 AI 模型下載（早期版本用過 YOLOv8-tfjs，已於 v2.2 完全移除）。
 
 ---
 
-## 展望 (Future Work)
+## 🚀 本機開發 / 手機測試
 
-*   **防盜浮水印:** 新增輸入框，讓使用者能自訂浮水印文字並印在最終圖片上。
-*   **EXIF 自動旋轉:** 讀取照片的 EXIF 方向資訊，自動將橫躺的照片轉正。
-*   **Web Worker 優化:** 將耗時的 OpenCV 運算移至背景執行緒，避免 UI 凍結。
+因為手機瀏覽器需要 HTTPS 才能開相機權限，附一支 Python 腳本一鍵起 HTTPS 伺服器：
 
-歡迎提交 Pull Request 或開啟 Issue 來一同完善這個專案！
+```bash
+python serve.py
+```
+
+- 預設 port 8443（`python serve.py 9443` 可指定其他 port）
+- 若沒有 `cert.pem` / `key.pem` 會自動用 `cryptography` 套件產一組（也支援 openssl CLI）
+- 啟動後會列出電腦所有區網 IP；手機連到**同一個 Wi-Fi**（例如手機開熱點）即可透過 `https://<內網IP>:8443/` 開啟
+- 首次連線瀏覽器會警告憑證不受信任 → 進階 → 繼續前往
+
+`cert.pem` / `key.pem` 已在 `.gitignore` 排除，不會上傳。
+
+---
+
+## 📤 部署到 GitHub Pages
+
+本專案是純靜態網站，不需要任何後端或建置步驟：
+
+1. Fork 或複製到你自己的 repo
+2. Settings → Pages → Source 選 `Deploy from a branch` → Branch 選 `main`、資料夾 `/(root)` → Save
+3. 等 1-3 分鐘即可透過 `https://<你的帳號>.github.io/<repo-name>/` 開啟
+
+Service Worker 有版本號機制，你更新程式碼時只要改 `sw.js` 裡的 `CACHE_NAME` 版本，使用者的 PWA 下次啟動就會自動更新。
+
+---
+
+## 📐 專案結構
+
+```
+├─ index.html
+├─ manifest.json
+├─ sw.js                       # Service Worker (含 CACHE_NAME 版本)
+├─ serve.py                    # 本機 HTTPS 開發伺服器
+├─ icon.svg / icon-192.png / icon-512.png
+├─ css/
+│  └─ styles.css
+└─ js/
+   ├─ app.js                   # 進入點
+   ├─ canvas-editor.js         # 主邏輯：偵測 / 手勢 / UI
+   ├─ image-loader.js          # 圖片載入 + EXIF 方向處理
+   ├─ pdf-export.js            # jsPDF 匯出
+   ├─ state.js / ui.js
+   ├─ detection/
+   │  └─ opencv.js             # OpenCV 相關 helper
+   └─ workers/
+      └─ opencv-worker.js      # Web Worker：warp + enhance pipeline
+```
+
+---
+
+## 🧭 使用流程
+
+1. **首頁**：拍攝或從相簿選取照片
+2. **編輯頁**：
+   - 自動偵測邊界後，四個角/邊可以拖動或用方向鍵微調（**兩段式**：第一次點只選取，再點才拖曳）
+   - 濾鏡：亮度 / 對比 / 飽和度 / 銳化 / 降噪 + 黑白 / 文件強化 / 去除陰影 / 自動白平衡
+   - 比例：證件 / A4 / 4:3 / 16:9 / 自由；輸出解析度可選
+3. **結果頁**：下載 JPG / 下載 PDF / 加入多頁 / 分享；點圖可放大檢視
+
+---
+
+## 🗺️ 路線圖 (可能的方向)
+
+- [ ] 即時相機取景時的邊框預覽（`getUserMedia` + 每幀低解析偵測）
+- [ ] Tesseract.js OCR「複製文字」按鈕
+- [ ] 多頁模式頂端 toggle：拍完自動加入、免每次按「加入多頁」
+- [ ] 文字自動轉正（依水平線角度統計）
+- [ ] 證件正反面拼版 A4 匯出
+- [ ] 純函式（scoreQuad / pickBorderLines）加單元測試
+- [ ] PWA 更新可用時彈 toast
+
+---
+
+## 📝 授權
+
+MIT。歡迎 fork、修改、二次發行；如果覺得有用給個 ⭐ 就好。

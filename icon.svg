@@ -1,83 +1,68 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="120" y1="80" x2="900" y2="920" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#5b2f14"/>
-      <stop offset="0.5" stop-color="#7a3f1b"/>
-      <stop offset="1" stop-color="#8d4a20"/>
-    </linearGradient>
-
-    <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#ffb47a"/>
+    <linearGradient id="bg" x1="120" y1="80" x2="920" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f4a261"/>
+      <stop offset="0.55" stop-color="#e08a5b"/>
       <stop offset="1" stop-color="#d97757"/>
     </linearGradient>
 
-    <linearGradient id="scan" x1="0" y1="0" x2="1" y2="0">
-      <stop stop-color="#ffb47a" stop-opacity="0"/>
-      <stop offset="0.5" stop-color="#f4a261"/>
-      <stop offset="1" stop-color="#ffb47a" stop-opacity="0"/>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fbf3e9"/>
     </linearGradient>
 
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="12" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-
-    <filter id="softGlow">
-      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#f4a261" flood-opacity="0.55"/>
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#4a2b0d" flood-opacity="0.28"/>
     </filter>
   </defs>
 
-  <!-- Background -->
-  <rect width="1024" height="1024" rx="240" fill="url(#bg)"/>
+  <!-- 溫暖橘漸層底 -->
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
 
-  <!-- Outer scanning frame -->
-  <g stroke="url(#warm)" stroke-width="18" stroke-linecap="round" filter="url(#glow)">
-    <path d="M240 360V240H360"/>
-    <path d="M664 240H784V360"/>
-    <path d="M240 664V784H360"/>
-    <path d="M664 784H784V664"/>
+  <!-- 微微傾斜的文件卡片，帶陰影 -->
+  <g transform="rotate(-5 512 512)" filter="url(#cardShadow)">
+    <rect x="284" y="248" width="456" height="576" rx="30" fill="url(#paper)"/>
+
+    <!-- 頁首橫線 (代表標題) -->
+    <rect x="336" y="308" width="240" height="22" rx="11" fill="#d97757" opacity="0.55"/>
+    <rect x="336" y="352" width="160" height="16" rx="8" fill="#e8a87c" opacity="0.55"/>
+
+    <!-- 大頭照方塊 -->
+    <rect x="336" y="404" width="184" height="220" rx="12" fill="#ffdcbe"/>
+    <circle cx="428" cy="472" r="34" fill="#e8a87c"/>
+    <path d="M 356 620 L 410 550 L 452 580 L 500 500 L 500 624 L 356 624 Z" fill="#e8a87c" opacity="0.9"/>
+
+    <!-- 右側資料欄 -->
+    <g fill="#e8a87c" opacity="0.65">
+      <rect x="548" y="410" width="164" height="16" rx="8"/>
+      <rect x="548" y="444" width="132" height="16" rx="8"/>
+      <rect x="548" y="490" width="164" height="16" rx="8"/>
+      <rect x="548" y="524" width="112" height="16" rx="8"/>
+      <rect x="548" y="570" width="164" height="16" rx="8"/>
+      <rect x="548" y="604" width="140" height="16" rx="8"/>
+    </g>
+
+    <!-- 底部段落線 -->
+    <g fill="#d9c8b8" opacity="0.7">
+      <rect x="336" y="680" width="376" height="14" rx="7"/>
+      <rect x="336" y="712" width="320" height="14" rx="7"/>
+      <rect x="336" y="744" width="376" height="14" rx="7"/>
+      <rect x="336" y="776" width="240" height="14" rx="7"/>
+    </g>
   </g>
 
-  <!-- Central card -->
-  <g filter="url(#softGlow)">
-    <rect x="280" y="280" width="464" height="464" rx="40"
-          fill="#3a1e0e"
-          stroke="url(#warm)"
-          stroke-width="10"/>
+  <!-- App 內同款「四角括號」的裁切框，作為視覺主體 -->
+  <g stroke="#ffffff" stroke-width="46" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 232 344 L 232 232 L 344 232"/>
+    <path d="M 680 232 L 792 232 L 792 344"/>
+    <path d="M 232 680 L 232 792 L 344 792"/>
+    <path d="M 680 792 L 792 792 L 792 680"/>
   </g>
 
-  <!-- Inner image area -->
-  <rect x="340" y="340" width="344" height="344" rx="24"
-        fill="#4a2b17"
-        stroke="#8a5a3a"
-        stroke-width="4"/>
-
-  <!-- Sun -->
-  <circle cx="590" cy="420" r="34" fill="#ffb47a" opacity="0.9"/>
-
-  <!-- Landscape -->
-  <path d="M360 620L455 500L535 580L615 460L664 520V664H360V620Z"
-        fill="url(#warm)"
-        opacity="0.9"/>
-
-  <!-- Scan line -->
-  <rect x="320" y="505" width="384" height="12" rx="6"
-        fill="url(#scan)"
-        filter="url(#glow)"/>
-
-  <!-- Precision crop icon -->
-  <g stroke="#ffd1a8" stroke-width="16" stroke-linecap="round" filter="url(#glow)">
-    <path d="M690 470V640"/>
-    <path d="M610 550H780"/>
-  </g>
-
-  <!-- Corner dots -->
-  <circle cx="300" cy="220" r="6" fill="#ffb47a"/>
-  <circle cx="740" cy="220" r="6" fill="#f4a261"/>
-  <circle cx="220" cy="740" r="6" fill="#ffb47a"/>
-  <circle cx="804" cy="740" r="6" fill="#f4a261"/>
+  <!-- 對稱在括號旁的溫暖色小點，跟工具內演算法 chip 呼應 -->
+  <circle cx="180" cy="180" r="10" fill="#fbf3e9" opacity="0.7"/>
+  <circle cx="844" cy="180" r="10" fill="#fbf3e9" opacity="0.7"/>
+  <circle cx="180" cy="844" r="10" fill="#fbf3e9" opacity="0.7"/>
+  <circle cx="844" cy="844" r="10" fill="#fbf3e9" opacity="0.7"/>
 </svg>
