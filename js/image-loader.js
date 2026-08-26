@@ -13,6 +13,19 @@ function loadImageFromObjectUrl(url) {
     });
 }
 
+// 讀取檔案時考慮 EXIF 方向：優先用 createImageBitmap({ imageOrientation: 'from-image' })
+// 讓瀏覽器把方向轉正；不支援時退回 <img> (瀏覽器已多半自動處理 EXIF)。
+async function loadOrientedBitmap(file) {
+    if (typeof createImageBitmap === 'function') {
+        try {
+            return await createImageBitmap(file, { imageOrientation: 'from-image' });
+        } catch (err) {
+            console.warn('createImageBitmap 失敗，改用 <img> 讀取', err);
+        }
+    }
+    return null;
+}
+
 export async function prepareImageFile(file, {
     getSourceImageMaxDimension,
     setStatus,
@@ -22,7 +35,19 @@ export async function prepareImageFile(file, {
     const tempUrl = URL.createObjectURL(file);
 
     try {
-        const tempImg = await loadImageFromObjectUrl(tempUrl);
+        const bitmap = await loadOrientedBitmap(file);
+        let tempImg;
+        if (bitmap) {
+            // 已由 createImageBitmap 轉正方向；接下來後續流程統一走 canvas
+            const orientCanvas = document.createElement('canvas');
+            orientCanvas.width = bitmap.width;
+            orientCanvas.height = bitmap.height;
+            orientCanvas.getContext('2d').drawImage(bitmap, 0, 0);
+            bitmap.close?.();
+            tempImg = await loadImageFromObjectUrl(orientCanvas.toDataURL('image/jpeg', 0.95));
+        } else {
+            tempImg = await loadImageFromObjectUrl(tempUrl);
+        }
         const originalWidth = tempImg.width;
         const originalHeight = tempImg.height;
         const maxSourceDim = getSourceImageMaxDimension(originalWidth, originalHeight);

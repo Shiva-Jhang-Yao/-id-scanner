@@ -1,4 +1,4 @@
-const CACHE_NAME = 'id-scanner-v2.5.5'; // 更新版本號以觸發 PWA 強制更新
+const CACHE_NAME = 'id-scanner-v2.7.4'; // 更新版本號以觸發 PWA 強制更新
 const urlsToCache = [
     './',
     './index.html',
@@ -10,6 +10,7 @@ const urlsToCache = [
     './js/canvas-editor.js',
     './js/pdf-export.js',
     './js/detection/opencv.js',
+    './js/workers/opencv-worker.js',
     './manifest.json',
     './icon.svg',
     './icon-192.png',
