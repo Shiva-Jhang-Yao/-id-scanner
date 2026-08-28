@@ -2069,6 +2069,17 @@ export function initScannerApp() {
         };
     }
 
+    // Blob → data URL：確保下游的 downloadJpg / share / addToPdf / downloadPdf
+    // 那幾個 handler 讀到 resultImage.src 時仍是 data:image/... 開頭
+    function blobToDataURL(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error || new Error('FileReader 失敗'));
+            reader.readAsDataURL(blob);
+        });
+    }
+
     function showResultCard(imageSrc, finalW, finalH, blobSize) {
         document.getElementById('resultImage').src = imageSrc;
         document.getElementById('resultResolution').textContent = `📐 圖片尺寸：${finalW} x ${finalH} 像素`;
@@ -2115,8 +2126,9 @@ export function initScannerApp() {
                     outputRes: params.outputRes,
                     filters: params.filters
                 }, [bitmap]);
-                const url = URL.createObjectURL(workerRes.blob);
-                showResultCard(url, workerRes.width, workerRes.height, workerRes.blob.size);
+                // 轉成 data URL 讓 download / share / addToPdf / downloadPdf 那幾個 handler 通用
+                const dataUrl = await blobToDataURL(workerRes.blob);
+                showResultCard(dataUrl, workerRes.width, workerRes.height, workerRes.blob.size);
                 loading.style.display = 'none';
                 processBtn.disabled = false;
                 if (processBtnLabel) processBtnLabel.textContent = '裁切圖片';
@@ -2453,7 +2465,7 @@ export function initScannerApp() {
     // 處理下載圖片邏輯
     downloadJpgBtn.addEventListener('click', () => {
         const dataUrl = document.getElementById('resultImage').src;
-        if (!dataUrl || !dataUrl.startsWith('data:image')) return;
+        if (!dataUrl || (!dataUrl.startsWith('data:image') && !dataUrl.startsWith('blob:'))) return;
 
         // 將 Base64 轉換為 Blob 進行下載，解決手機瀏覽器因網址過長導致下載無反應的問題
         fetch(dataUrl)
@@ -2475,7 +2487,7 @@ export function initScannerApp() {
     // 處理分享圖片邏輯 (Web Share API)
     shareBtn.addEventListener('click', async () => {
         const dataUrl = document.getElementById('resultImage').src;
-        if (!dataUrl || !dataUrl.startsWith('data:image')) return;
+        if (!dataUrl || (!dataUrl.startsWith('data:image') && !dataUrl.startsWith('blob:'))) return;
 
         try {
             // 將 Base64 轉換回 File 物件以供分享
@@ -2497,7 +2509,7 @@ export function initScannerApp() {
     // 處理加入多頁文件邏輯
     addToPdfBtn.addEventListener('click', () => {
         const dataUrl = document.getElementById('resultImage').src;
-        if (!dataUrl || !dataUrl.startsWith('data:image')) return;
+        if (!dataUrl || (!dataUrl.startsWith('data:image') && !dataUrl.startsWith('blob:'))) return;
 
         state.pdfPages.push(dataUrl);
         pdfPageCount.textContent = state.pdfPages.length;
@@ -2682,7 +2694,7 @@ export function initScannerApp() {
     // 處理單張下載 PDF 邏輯
     downloadPdfBtn.addEventListener('click', async () => {
         const imgData = document.getElementById('resultImage').src;
-        if (!imgData || !imgData.startsWith('data:image')) return;
+        if (!imgData || (!imgData.startsWith('data:image') && !imgData.startsWith('blob:'))) return;
 
         try {
             const jsPDF = await getJsPdfConstructor();
